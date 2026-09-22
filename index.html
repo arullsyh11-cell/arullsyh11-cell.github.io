@@ -46,14 +46,53 @@
       background: #000000;
     }
 
-    :root {
-      --bg: #090d13; --surface: #111923; --surface-2: #182331; --line: #293846;
-      --text: #edf5f1; --muted: #90a2ac; --lime: #bcf04a; --lime-dark: #8abb23;
-      --danger: #fb7185; --warning: #f6c453; --shadow: 0 16px 42px rgba(0,0,0,.23);
-    }
-    body.light { --bg:#f4f7f4; --surface:#ffffff; --surface-2:#edf3ed; --line:#d6e0d7; --text:#17221b; --muted:#647469; --shadow:0 14px 34px rgba(22,34,27,.10); }
-    * { box-sizing:border-box; }
-    body { margin:0; background:#000000 !important; color:var(--text); font-family:"DM Sans",sans-serif; transition:background .25s,color .25s; }
+:root {
+  /* Palette Dark Mode (Default) */
+  --bg: #090d13; 
+  --surface: #141815; 
+  --surface-2: #1b201c; 
+  --line: #374629;
+  --text: #edf5f1; 
+  --muted: #90a2ac; 
+  --lime: #bcf04a; 
+  --lime-dark: #8abb23;
+  --danger: #fb7185; 
+  --warning: #f6c453; 
+  --shadow: 0 16px 42px rgba(0,0,0,.23);
+}
+body.light {
+  /* Palette Light Mode */
+  --bg: #f4f7f4; 
+  --surface: #ffffff; 
+  --surface-2: #edf3ed; 
+  --line: #d6e0d7; 
+  --text: #17221b; 
+  --muted: #647469; 
+  --lime: #bcf04a; 
+  --lime-dark: #5c8114; /* Dibuat lebih gelap agar kontras di latar putih */
+  --shadow: 0 14px 34px rgba(22,34,27,.10);
+}
+
+/* Override Class Tailwind agar menyesuaikan saat Light Mode aktif */
+body.light .text-lime-300 { color: var(--lime-dark) !important; }
+body.light .border-lime-500\/20 { border-color: rgba(92, 129, 20, 0.4) !important; }
+body.light .bg-lime-300\/10 { background-color: rgba(188, 240, 74, 0.3) !important; }
+body.light .text-slate-950 { color: #ffffff !important; }
+
+/* Hapus !important warna hitam statis dari HTML dan Body */
+html {
+  background: var(--bg) !important; 
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0; 
+  background: var(--bg) !important; 
+  color: var(--text); 
+  font-family: "DM Sans", sans-serif; 
+  transition: background .25s, color .25s; 
+  letter-spacing: -.01em;
+}
     button, input, select, textarea { font:inherit; }
     button { cursor:pointer; }
     button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline:3px solid rgba(188,240,74,.5); outline-offset:2px; }
@@ -147,6 +186,9 @@
       max-width: 300px; 
       margin: auto; 
       background: #152008; 
+      background: var(--surface-2); 
+      color: var(--lime-dark); 
+      border: 1.5px solid var(--lime-dark);
       color: #bcf04a; 
       border: 1.5px solid #bcf04a;
       border-radius: 12px; 
@@ -291,18 +333,6 @@
     }
     @media (max-width: 899px) { .main-area { padding:14px 14px 96px; } }
 
-    :root{
-      --bg:#f6f7f5;--surface:#fff;--surface-2:#f0f2ef;--line:#e4e7e2;
-      --text:#171a18;--muted:#747b75;--lime:#b8e94d;--lime-dark:#83a92b;
-      --danger:#dc5d6f;--warning:#d79d28;
-    }
-    body:not(.light){
-      --bg:#0c0f0d;--surface:#141815;--surface-2:#1b201c;--line:#292f2a;
-      --text:#f2f5f1;--muted:#8f9890;--lime:#b8e94d;--lime-dark:#8eaf35;
-      --danger:#f17889;--warning:#e0ad4a;
-    }
-    html{background:#000000!important;scroll-behavior:smooth}
-    body{background:#000000!important;color:var(--text);font-family:"DM Sans",system-ui,sans-serif;letter-spacing:-.01em}
     
     .sidebar .flex.items-center.gap-3.px-3.mb-10{padding:4px 10px!important;margin-bottom:28px!important}
     .sidebar .w-10.h-10{width:34px!important;height:34px!important;border-radius:10px!important}
@@ -372,7 +402,7 @@
       box-shadow:none!important;border:0!important;padding-left:15px!important;padding-right:15px!important;
     }
     
-    .secondary-btn,.danger-btn{min-height:40px!important;border-radius:9px!important;font-size:13px!important;box-shadow:none!important;}
+    .secondary-btn,.danger-btn{min-height:40px!important;border-radius:99px!important;font-size:13px!important;box-shadow:none!important;}
     .secondary-btn{background:var(--surface-2)!important;color:var(--text)!important;border:1px solid var(--line)!important}
     .danger-btn{background:transparent!important;color:var(--danger)!important;border:1px solid color-mix(in srgb,var(--danger) 28%,var(--line))!important}
     .icon-btn{width:38px!important;height:38px!important;border-radius:9px!important;background:var(--surface-2)!important;border:1px solid var(--line)!important}
@@ -389,7 +419,7 @@
     }
   </style>
 </head>
-<body class="w-full" style="background: #000000 !important;">
+<body class="w-full">
 
   <!-- ANIMASI SPLASH SCREEN -->
   <div id="splash-screen">
@@ -445,22 +475,31 @@
           <p id="siap-bergerak-label" class="text-lime-300 font-bold text-sm relative tracking-wider">SELAMAT PAGI, <span id="profile-name-display">COYY</span>?</p>
           <p id="next-workout-copy" class="muted mt-2 relative text-sm">Pilih routine dan mulai saat kamu siap.</p>
 
-          <div class="mt-4 p-4 rounded-xl bg-[var(--surface-2)] border border-[var(--line)] relative flex items-center justify-between">
+          <!-- KARTU TARGET MINGGUAN MODERN (THIS WEEK) -->
+          <div class="mt-4 p-4 rounded-2xl bg-[var(--surface-2)] border border-[var(--line)] relative">
+            <!-- Header: Judul & Pill Badge -->
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="font-extrabold text-lg tracking-tight">This Week</h3>
+              <span id="weekly-pill-count" class="px-3 py-1 rounded-full bg-[var(--lime)] text-[#142009] font-extrabold text-xs">0/4</span>
+            </div>
+
+            <!-- Baris Hari Mingguan (Mon - Sun) -->
+            <div id="weekly-days-bar" class="grid grid-cols-7 gap-1 text-center mb-4"></div>
+
+            <!-- Progress Bar & Persentase -->
             <div>
-              <p class="muted text-xs font-bold uppercase tracking-wider">Target Minggu Ini</p>
-              <div class="mt-1 flex items-baseline gap-2">
-                <strong id="goal-value" class="text-2xl font-extrabold text-lime-300">0 / 4</strong>
-                <span class="muted text-xs">sesi selesai</span>
+              <div class="flex justify-between text-xs font-bold muted mb-1.5">
+                <span>Weekly target progress</span>
+                <span id="weekly-progress-percent" class="text-[var(--text)]">0%</span>
+              </div>
+              <div class="progress-line">
+                <span id="weekly-progress-bar-fill" style="width: 0%"></span>
               </div>
             </div>
-            <i data-lucide="target" class="w-6 h-6 text-lime-300 opacity-80"></i>
           </div>
 
-          <div class="flex flex-wrap items-center gap-3 mt-4 pt-4 border-t border-[var(--line)] relative text-xs">
-            <span class="chip"><i data-lucide="weight" class="w-3 h-3 mr-1.5 text-lime-300"></i>BB: <strong id="profile-bb-display" class="ml-1 text-[var(--text)]">65 kg</strong></span>
-            <span class="chip"><i data-lucide="ruler" class="w-3 h-3 mr-1.5 text-lime-300"></i>TB: <strong id="profile-tb-display" class="ml-1 text-[var(--text)]">170 cm</strong></span>
-            <span class="chip"><i data-lucide="target" class="w-3 h-3 mr-1.5 text-lime-300"></i>Target Mingguan: <strong id="profile-target-display" class="ml-1 text-[var(--text)]">3 sesi</strong></span>
-            <button id="dashboard-start" class="lime-btn px-5 mt-4 w-full relative">Mulai Workout</button>
+          <div class="mt-4 pt-4 border-t border-[var(--line)] relative text-xs">
+            <button id="dashboard-start" class="lime-btn px-5 w-full relative">Mulai Workout</button>
           </div>
         </div>
 
@@ -859,7 +898,7 @@
       <div class="panel p-4 mb-5 flex items-center gap-4 bg-[var(--surface-2)] border-[var(--line)]">
         <div id="profile-avatar-initial" class="w-14 h-14 rounded-2xl bg-lime-300 text-slate-950 font-extrabold text-2xl grid place-items-center shrink-0">A</div>
         <div>
-          <h2 id="profile-header-name" class="font-extrabold text-xl tracking-tight">Alex</h2>
+          <h2 id="profile-header-name" class="font-extrabold text-xl tracking-tight">COYY</h2>
           <p id="profile-header-stats" class="muted text-xs mt-0.5">13 workouts · 4,250 kkal</p>
           <span id="profile-header-target-badge" class="inline-block mt-1 text-[11px] font-bold text-lime-300">4x/week target</span>
         </div>
@@ -872,7 +911,7 @@
           
           <div>
             <label class="block text-[11px] font-bold uppercase tracking-wider muted mb-1" for="profile-name-input">Name</label>
-            <input id="profile-name-input" class="field" type="text" maxlength="30" placeholder="Contoh: Alex" required>
+            <input id="profile-name-input" class="field" type="text" maxlength="30" placeholder="Contoh: COYY" required>
           </div>
 
           <div>
@@ -1112,7 +1151,7 @@
 
     function seedState() {
       return {
-        settings:{theme:"dark",restSeconds:90, weight:65, height:170, age:25, heightUnit:"cm", weightUnit:"kg", weeklyGoal:4, userName:"Alex"},
+        settings:{theme:"dark",restSeconds:90, weight:65, height:170, age:25, heightUnit:"cm", weightUnit:"kg", weeklyGoal:4, userName:"COYY"},
         exercises:seedExercises,
         routines:[],
         activeSession:null,
@@ -1147,14 +1186,14 @@
         const existingCustoms = (loaded.exercises || []).filter(e => e.isCustom);
         loaded.exercises = [...seedExercises, ...existingCustoms];
 
-        if(!loaded.settings) loaded.settings = {theme:"dark",restSeconds:90, weight:65, height:170, age:25, heightUnit:"cm", weightUnit:"kg", weeklyGoal:4, userName:"Alex"};
+        if(!loaded.settings) loaded.settings = {theme:"dark",restSeconds:90, weight:65, height:170, age:25, heightUnit:"cm", weightUnit:"kg", weeklyGoal:4, userName:"COYY"};
         if(loaded.settings.weight === undefined) loaded.settings.weight = 65;
         if(loaded.settings.height === undefined) loaded.settings.height = 170;
         if(loaded.settings.age === undefined) loaded.settings.age = 25;
         if(loaded.settings.heightUnit === undefined) loaded.settings.heightUnit = "cm";
         if(loaded.settings.weightUnit === undefined) loaded.settings.weightUnit = "kg";
         if(loaded.settings.weeklyGoal === undefined) loaded.settings.weeklyGoal = 4;
-        if(loaded.settings.userName === undefined) loaded.settings.userName = "Alex";
+        if(loaded.settings.userName === undefined) loaded.settings.userName = "COYY";
 
         if(!loaded.weightHistory) {
           loaded.weightHistory = [];
@@ -1218,7 +1257,7 @@
     }
 
     function updateHeaderInitial() {
-      const name = (state && state.settings && state.settings.userName) ? state.settings.userName : "Alex";
+      const name = (state && state.settings && state.settings.userName) ? state.settings.userName : "COYY";
       const profileBtn = document.getElementById("open-profile-btn");
       if (profileBtn) {
         profileBtn.textContent = name.charAt(0).toUpperCase();
@@ -1226,7 +1265,7 @@
     }
 
     function renderProfileModal() {
-      const name = state.settings.userName || "Alex";
+      const name = state.settings.userName || "COYY";
       const totalWorkouts = state.history.length;
       const totalCals = state.history.reduce((acc, s) => acc + (s.caloriesBurned || 0), 0);
 
@@ -1559,6 +1598,7 @@
       `).join("") || '<p class="muted text-xs italic text-center py-3">Exercise tidak ditemukan.</p>';
       if(window.lucide) lucide.createIcons();
     }
+    
 
     function addExerciseToBuilder(id) {
       if (selectedRoutineExercises.some(item => item.id === id)) return;
@@ -1682,9 +1722,79 @@
       lucide.createIcons();
     }
 
-    function renderDashboard(){
-      const h=state.history, now=Date.now(), week=h.filter(s=>now-new Date(s.endedAt).getTime()<604800000);
+    function renderWeeklyTargetCard() {
+      const h = state.history;
+      const now = new Date();
       
+      // Cari hari Senin di minggu berjalan
+      const currentDay = now.getDay();
+      const distanceToMon = currentDay === 0 ? -6 : 1 - currentDay;
+      const monday = new Date(now);
+      monday.setDate(now.getDate() + distanceToMon);
+      monday.setHours(0,0,0,0);
+
+      const workoutDates = new Set(
+        h.map(s => new Date(s.endedAt).toDateString())
+      );
+
+      let weekCount = 0;
+      const weekDates = [];
+
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(monday);
+        d.setDate(monday.getDate() + i);
+        const dateStr = d.toDateString();
+        const hasWorkout = workoutDates.has(dateStr);
+        
+        if (hasWorkout) weekCount++;
+        
+        weekDates.push({
+          dateNum: d.getDate(),
+          isToday: dateStr === now.toDateString(),
+          hasWorkout: hasWorkout
+        });
+      }
+
+      const goal = state.settings.weeklyGoal || 4;
+      const percent = Math.min(100, Math.round((weekCount / goal) * 100));
+
+      // Update Badge & Progress Bar
+      const pill = document.getElementById("weekly-pill-count");
+      if (pill) pill.textContent = `${weekCount}/${goal}`;
+
+      const pctLabel = document.getElementById("weekly-progress-percent");
+      if (pctLabel) pctLabel.textContent = `${percent}%`;
+
+      const barFill = document.getElementById("weekly-progress-bar-fill");
+      if (barFill) barFill.style.width = `${percent}%`;
+
+      // Render Baris Hari (Mon - Sun)
+      const daysBar = document.getElementById("weekly-days-bar");
+      if (daysBar) {
+        const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+        daysBar.innerHTML = weekDates.map((item, idx) => {
+          let circleStyle = "w-8 h-8 rounded-full flex items-center justify-center text-xs mx-auto font-medium text-[var(--muted)]";
+          let indicatorStyle = "h-1 w-full rounded-full bg-[var(--line)] mb-2";
+
+          if (item.hasWorkout) {
+            circleStyle = "w-8 h-8 rounded-full flex items-center justify-center text-xs mx-auto font-extrabold bg-[var(--lime)] text-[#142009] shadow-sm";
+            indicatorStyle = "h-1 w-full rounded-full bg-[var(--lime)] mb-2";
+          } else if (item.isToday) {
+            circleStyle = "w-8 h-8 rounded-full flex items-center justify-center text-xs mx-auto font-extrabold border-2 border-[var(--lime)] text-[var(--lime)]";
+          }
+
+          return `
+            <div class="flex flex-col items-center">
+              <span class="text-[11px] font-bold muted mb-1.5">${dayNames[idx]}</span>
+              <div class="${indicatorStyle}"></div>
+              <div class="${circleStyle}">${item.dateNum}</div>
+            </div>
+          `;
+        }).join("");
+      }
+    }
+
+    function renderDashboard(){
       const currentHour = new Date().getHours();
       let greeting = "SELAMAT MALAM";
       if (currentHour >= 3 && currentHour < 11) {
@@ -1695,15 +1805,11 @@
         greeting = "SELAMAT SORE";
       }
 
-      document.getElementById("siap-bergerak-label").innerHTML = `${greeting}, <span id="profile-name-display">${esc((state.settings.userName || "Alex").toUpperCase())}</span>`;
-      document.getElementById("profile-bb-display").textContent = state.settings.weight + " " + (state.settings.weightUnit || "kg");
-      document.getElementById("profile-tb-display").textContent = state.settings.height + " " + (state.settings.heightUnit || "cm");
-      document.getElementById("profile-target-display").textContent = state.settings.weeklyGoal + " sesi";
-
-      document.getElementById("goal-value").textContent = week.length + " / " + state.settings.weeklyGoal;
+      document.getElementById("siap-bergerak-label").innerHTML = `${greeting}, <span id="profile-name-display">${esc((state.settings.userName || "COYY").toUpperCase())}</span>`;
       
       updateHeaderInitial();
       renderCalendar();
+      renderWeeklyTargetCard();
 
       const upcoming=state.routines[0];
       document.getElementById("next-workout-copy").textContent=upcoming ? upcoming.name+" · "+upcoming.exerciseIds.length+" exercise siap dijalankan." : "Buat routine pertama untuk mulai mencatat progress.";
