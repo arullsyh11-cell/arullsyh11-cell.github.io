@@ -132,6 +132,39 @@ body {
       box-shadow: 0 4px 14px rgba(188, 240, 74, 0.2);
     }
 
+    .logo-splash {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0px;
+  animation: logoIntro 1s ease;
+}
+
+.logo-splash img {
+  width: 140px;
+  height: 140px;
+  object-fit: cover;
+  border-radius: 22px;
+}
+
+.logo-splash span {
+  color: #bcf04a;
+  font-size: 28px;
+  font-weight: 800;
+}
+
+@keyframes logoIntro {
+  from {
+    opacity: 0;
+    transform: scale(.75);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
     /* Target Pill Styling Aktif/Nonaktif */
     .target-pill {
       transition: all 0.2s ease;
