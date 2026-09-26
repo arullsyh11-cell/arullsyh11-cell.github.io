@@ -96,7 +96,7 @@ const KEY = "gymflow-v3";
       "Seminggu Terakhir": {id:"Seminggu Terakhir", en:"Last 7 Days"},
       "Belum ada history. Selesaikan workout untuk melihat progress di sini.": {id:"Belum ada riwayat. Selesaikan workout untuk melihat progres di sini.", en:"No history yet. Complete a workout to see your progress here."},
       "Catat Berat Badan": {id:"Catat Berat Badan", en:"Log Weight"},
-      "Berat Badan (kg)": {id:"Berat Badan (kg)", en:"Weight (kg)"},
+      "Berat Badan (kg)": {id:"Berat (kg)", en:"Weight (kg)"},
       "Tanggal": {id:"Tanggal", en:"Date"},
       "Batal": {id:"Batal", en:"Cancel"},
       "Simpan": {id:"Simpan", en:"Save"},
