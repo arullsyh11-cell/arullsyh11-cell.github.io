@@ -6,6 +6,8 @@ const KEY = "gymflow-v3";
     const uid = () => "gf_" + Date.now().toString(36) + Math.random().toString(36).slice(2,7);
     let state, selectedRoutineExercises = [], confirmCallback = null, elapsedInterval = null;
     let currentCalendarDate = new Date();
+    let selectedAnalyticsMuscle = "chest";
+    let analyticsPeriod = "30d";
 
 
     // ==================== GYMFlow i18n ====================
@@ -17,6 +19,7 @@ const KEY = "gymflow-v3";
       "Routines": {id:"Routine", en:"Routines"},
       "Workout": {id:"Workout", en:"Workout"},
       "Progress": {id:"Progres", en:"Progress"},
+      "Statistics": {id:"Statistik", en:"Statistics"},
       "Reset data": {id:"Reset data", en:"Reset data"},
       "Data tersimpan di perangkat ini.": {id:"Data tersimpan di perangkat ini.", en:"Data is stored on this device."},
       "Offline": {id:"Offline", en:"Offline"},
@@ -406,11 +409,17 @@ const KEY = "gymflow-v3";
       document.getElementById("unit-lbs").className = unit === 'lbs' ? "flex-1 py-2 text-xs font-bold rounded-lg bg-[var(--surface)] text-[var(--text)] transition-all" : "flex-1 py-2 text-xs font-bold rounded-lg muted transition-all";
     }
 
-    function toggleProfileDarkMode() {
-      state.settings.theme = state.settings.theme === "dark" ? "light" : "dark";
+    function setProfileTheme(theme) {
+      const nextTheme = theme === "light" ? "light" : "dark";
+      state.settings.theme = nextTheme;
       save();
       setTheme();
       renderProfileModal();
+      if (window.lucide) lucide.createIcons();
+    }
+
+    function toggleProfileDarkMode() {
+      setProfileTheme(state.settings.theme === "dark" ? "light" : "dark");
     }
 
     function updateHeaderInitial() {
@@ -445,17 +454,16 @@ const KEY = "gymflow-v3";
         p.classList.toggle("active", val === state.settings.weeklyGoal);
       });
 
-      // Dark mode status
+      // Refined theme controls
       const isDark = state.settings.theme !== "light";
       document.getElementById("dark-mode-desc").textContent = isDark ? tr("Currently dark") : tr("Currently light");
-      const thumb = document.getElementById("dark-mode-thumb");
-      const toggleBtn = document.getElementById("profile-dark-toggle");
-      if(isDark) {
-        toggleBtn.style.background = "var(--lime)";
-        thumb.style.transform = "translateX(24px)";
-      } else {
-        toggleBtn.style.background = "var(--line)";
-        thumb.style.transform = "translateX(2px)";
+      const darkOption = document.getElementById("theme-dark-option");
+      const lightOption = document.getElementById("theme-light-option");
+      if(darkOption && lightOption){
+        darkOption.classList.toggle("active", isDark);
+        lightOption.classList.toggle("active", !isDark);
+        darkOption.setAttribute("aria-pressed", String(isDark));
+        lightOption.setAttribute("aria-pressed", String(!isDark));
       }
       
       updateHeaderInitial();
@@ -522,38 +530,42 @@ const KEY = "gymflow-v3";
       };
     }
 
-    // --- SWITCH PROGRESS TAB (Overview | Weight | History) ---
+    // --- SWITCH PROGRESS TAB (Overview | Weight | History | Statistics) ---
     function switchProgressTab(tabName) {
-      const overviewContent = document.getElementById("progress-overview-content");
-      const weightContent = document.getElementById("progress-weight-content");
-      const historyContent = document.getElementById("progress-history-content");
+      const contents = {
+        overview: document.getElementById("progress-overview-content"),
+        weight: document.getElementById("progress-weight-content"),
+        history: document.getElementById("progress-history-content"),
+        statistics: document.getElementById("progress-statistics-content")
+      };
 
-      const overviewBtn = document.getElementById("tab-overview-btn");
-      const weightBtn = document.getElementById("tab-weight-btn");
-      const historyBtn = document.getElementById("tab-history-btn");
+      const buttons = {
+        overview: document.getElementById("tab-overview-btn"),
+        weight: document.getElementById("tab-weight-btn"),
+        history: document.getElementById("tab-history-btn"),
+        statistics: document.getElementById("tab-statistics-btn")
+      };
 
-      // Hide all
-      overviewContent.classList.add("hidden");
-      weightContent.classList.add("hidden");
-      historyContent.classList.add("hidden");
+      Object.values(contents).forEach(el => el?.classList.add("hidden"));
 
-      // Reset button styles
-      overviewBtn.className = "flex-1 py-2 text-xs font-bold text-center rounded-lg muted hover:text-[var(--text)] transition-all";
-      weightBtn.className = "flex-1 py-2 text-xs font-bold text-center rounded-lg muted hover:text-[var(--text)] transition-all";
-      historyBtn.className = "flex-1 py-2 text-xs font-bold text-center rounded-lg muted hover:text-[var(--text)] transition-all";
+      const baseClass = "flex-1 py-2 text-xs font-bold text-center rounded-lg muted hover:text-[var(--text)] transition-all";
+      const activeClass = "flex-1 py-2 text-xs font-bold text-center rounded-lg bg-[var(--surface)] text-[var(--text)] shadow-sm transition-all";
+      Object.values(buttons).forEach(btn => { if (btn) btn.className = baseClass; });
+
+      const activeContent = contents[tabName] || contents.overview;
+      const activeButton = buttons[tabName] || buttons.overview;
+      activeContent?.classList.remove("hidden");
+      if (activeButton) activeButton.className = activeClass;
 
       if (tabName === "overview") {
-        overviewContent.classList.remove("hidden");
-        overviewBtn.className = "flex-1 py-2 text-xs font-bold text-center rounded-lg bg-[var(--surface)] text-[var(--text)] shadow-sm transition-all";
-        renderOverviewCharts();
+        renderOverviewMetrics();
+        setTimeout(gfRefreshProgressMotion, 30);
       } else if (tabName === "weight") {
-        weightContent.classList.remove("hidden");
-        weightBtn.className = "flex-1 py-2 text-xs font-bold text-center rounded-lg bg-[var(--surface)] text-[var(--text)] shadow-sm transition-all";
         renderWeightTab();
       } else if (tabName === "history") {
-        historyContent.classList.remove("hidden");
-        historyBtn.className = "flex-1 py-2 text-xs font-bold text-center rounded-lg bg-[var(--surface)] text-[var(--text)] shadow-sm transition-all";
         renderHistory();
+      } else if (tabName === "statistics") {
+        renderStatisticsAnalytics();
       }
     }
 
@@ -803,8 +815,17 @@ const KEY = "gymflow-v3";
     });
 
     function setTheme(){
-      document.body.classList.toggle("light",state.settings.theme==="light");
-      document.documentElement.style.colorScheme=state.settings.theme==="light"?"light":"dark";
+      const light = state.settings.theme === "light";
+      document.body.classList.toggle("light", light);
+      document.documentElement.style.colorScheme = light ? "light" : "dark";
+      let meta = document.querySelector('meta[name="theme-color"]');
+      if(!meta){
+        meta = document.createElement("meta");
+        meta.name = "theme-color";
+        document.head.appendChild(meta);
+      }
+      meta.content = light ? "#f4f7f4" : "#080d0a";
+      document.body.dataset.theme = light ? "light" : "dark";
     }
     
     function navigate(tab){
@@ -1034,38 +1055,107 @@ const KEY = "gymflow-v3";
       lucide.createIcons();
     }
     
-    function renderExercises(){
+    
+    function exerciseIconSvg(name="", muscle="", equipment=""){
+      const text = `${name} ${muscle} ${equipment}`.toLowerCase();
+      let kind = "generic";
+      if (/treadmill|running|lari/.test(text)) kind = "treadmill";
+      else if (/cycling|bike|seped/.test(text)) kind = "bike";
+      else if (/bench|chest press|incline|floor press|fly/.test(text)) kind = "press";
+      else if (/row|upright row|bent over/.test(text)) kind = "row";
+      else if (/lat pulldown|pulldown|pull up|chin up/.test(text)) kind = "pull";
+      else if (/curl|bicep/.test(text)) kind = "curl";
+      else if (/shoulder|lateral raise|front raise|overhead press|shrug/.test(text)) kind = "raise";
+      else if (/squat|leg press/.test(text)) kind = "squat";
+      else if (/deadlift|rdl|romanian/.test(text)) kind = "deadlift";
+      else if (/lunge|split squat/.test(text)) kind = "lunge";
+      else if (/tricep|pushdown|skull crusher|extension/.test(text)) kind = "tricep";
+      else if (/calf/.test(text)) kind = "calf";
+      else if (/plank|crunch|sit up|sit-up|leg raise|ab/.test(text)) kind = "core";
+
+      const S = '#92a6b4', A = '#88F914', D = '#2b3943';
+      const line = (x1,y1,x2,y2,sw=5, color=S)=>`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="${sw}" stroke-linecap="round"/>`;
+      const circle = (cx,cy,r=5,fill=S)=>`<circle cx="${cx}" cy="${cy}" r="${r}" fill="${fill}"/>`;
+      const rect = (x,y,w,h,rx=4,fill=D,stroke='none',sw=0)=>`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`;
+
+      let art = `
+        ${circle(42,20,7)}
+        ${line(42,28,42,48,6)}
+        ${line(42,34,29,43,5)}
+        ${line(42,34,55,43,5)}
+        ${line(42,48,34,67,5)}
+        ${line(42,48,50,67,5)}
+      `;
+
+      if(kind==="treadmill"){
+        art += `${rect(67,44,12,4,2,A)}${line(72,48,84,66,4,A)}${line(84,66,66,66,4,A)}${line(66,66,58,52,4,S)}${line(58,52,72,52,4,S)}`;
+      } else if(kind==="bike"){
+        art += `${circle(62,57,10,"none")}${circle(91,57,10,"none")}${line(62,57,76,45,3,A)}${line(76,45,91,57,3,A)}${line(76,45,62,57,3,A)}${line(76,45,82,35,3,S)}${line(82,35,88,35,3,S)}${line(76,45,72,52,3,S)}`;
+      } else if(kind==="press"){
+        art += `${line(34,43,26,30,4,S)}${line(50,43,58,30,4,S)}${line(25,29,59,29,4,A)}${line(27,25,23,25,3,A)}${line(57,25,61,25,3,A)}${rect(63,22,4,41,2,S)}${rect(65,20,15,4,2,A)}${rect(65,61,18,4,2,A)}`;
+      } else if(kind==="row"){
+        art += `${line(35,44,54,58,5,S)}${line(54,58,76,48,4,A)}${line(76,48,90,48,3,S)}${line(54,58,82,62,3,D)}${circle(91,48,3,A)}`;
+      } else if(kind==="pull"){
+        art += `${rect(70,17,4,48,2,S)}${line(55,24,88,24,4,A)}${line(55,24,42,39,4,A)}${line(88,24,62,39,4,A)}${line(41,39,33,50,4,S)}${line(62,39,68,50,4,S)}`;
+      } else if(kind==="curl"){
+        art += `${line(36,44,57,53,5,S)}${line(57,53,65,43,5,S)}${line(65,43,77,43,4,A)}${line(65,43,61,33,5,S)}${line(61,33,70,29,4,A)}${circle(73,29,3,A)}`;
+      } else if(kind==="raise"){
+        art += `${line(32,46,20,33,4,A)}${line(52,46,64,33,4,A)}${circle(17,30,3,A)}${circle(67,30,3,A)}`;
+      } else if(kind==="squat"){
+        art += `${line(30,46,23,56,5,S)}${line(23,56,34,67,5,S)}${line(50,46,58,56,5,S)}${line(58,56,49,67,5,S)}${line(34,67,23,72,4,S)}${line(49,67,60,72,4,S)}${line(20,28,64,28,4,A)}${rect(15,24,5,8,2,A)}${rect(64,24,5,8,2,A)}`;
+      } else if(kind==="deadlift"){
+        art += `${line(35,45,52,57,5,S)}${line(52,57,66,52,5,S)}${line(66,52,80,62,4,S)}${line(80,62,95,62,4,A)}${line(80,62,85,48,4,S)}${circle(98,62,3,A)}`;
+      } else if(kind==="lunge"){
+        art += `${line(36,48,27,62,5,S)}${line(27,62,17,69,5,S)}${line(48,48,58,62,5,S)}${line(58,62,72,69,5,S)}${line(48,40,66,34,4,A)}${circle(69,33,3,A)}`;
+      } else if(kind==="tricep"){
+        art += `${rect(72,18,4,44,2,S)}${line(56,27,88,27,4,A)}${line(56,27,41,40,4,A)}${line(88,27,58,46,4,A)}${line(41,40,34,54,4,S)}${line(58,46,51,59,4,S)}`;
+      } else if(kind==="calf"){
+        art += `${line(34,48,38,64,5,S)}${line(38,64,33,72,5,S)}${line(50,48,46,64,5,S)}${line(46,64,51,72,5,S)}${rect(58,62,18,5,2,A)}`;
+      } else if(kind==="core"){
+        art = `${circle(26,29,7)}${line(31,35,49,45,6)}${line(49,45,67,56,5)}${line(67,56,78,56,4)}${line(42,41,31,55,5)}${line(31,55,19,55,4)}${rect(52,17,18,4,2,A)}${line(61,21,61,44,3,A)}`;
+      } else {
+        art += `${line(35,44,58,37,5,S)}${line(58,37,70,27,4,A)}${line(58,37,70,47,4,A)}${circle(74,27,3,A)}${circle(74,47,3,A)}`;
+      }
+
+      return `<svg viewBox="0 0 110 82" class="gf-exercise-art" aria-hidden="true">
+        <defs><linearGradient id="exArtBg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="rgba(136,249,20,.10)"/><stop offset="100%" stop-color="rgba(70,86,98,.12)"/></linearGradient></defs>
+        <rect x="2" y="2" width="106" height="78" rx="12" fill="url(#exArtBg)" stroke="rgba(136,249,20,.18)"/>
+        ${art}
+      </svg>`;
+    }
+
+function renderExercises(){
       const q=document.getElementById("exercise-search").value.toLowerCase();
       const wrapper = document.getElementById("custom-muscle-filter");
       const m = wrapper.querySelector('.custom-option.selected')?.dataset.value || "";
-      
+
       const filtered=state.exercises.filter(e=>(!m||e.muscle===m)&&(`${e.name} ${e.equipment} ${e.muscle}`).toLowerCase().includes(q));
       const list=document.getElementById("exercise-list"), empty=document.getElementById("exercise-empty"); 
       list.innerHTML=""; 
       empty.classList.toggle("hidden",filtered.length!==0);
-      
+
       filtered.forEach(e=>{
         const el=document.createElement("article");
-        el.className="panel p-5 flex flex-col justify-between transition-all duration-200 hover:border-[var(--lime)]/50 group";
+        el.className="panel exercise-directory-card group";
         el.innerHTML=`
-          <div>
-            <div class="flex justify-between items-start gap-3">
-              <div>
-                <h3 class="font-extrabold text-base group-hover:text-[var(--lime)] transition-colors">${esc(e.name)}</h3>
-                <p class="muted text-xs mt-1 flex items-center gap-1.5"><i data-lucide="wrench" class="w-3 h-3 text-[var(--lime)]"></i>${esc(e.equipment)}</p>
-              </div>
-              ${e.isCustom ? `<button class="icon-btn delete-exercise shrink-0 text-rose-400 bg-rose-500/10 border-rose-500/20 hover:bg-rose-500/20 transition-colors" data-id="${e.id}" aria-label="Hapus ${esc(e.name)}" title="Hapus Exercise"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : ""}
+          <div class="exercise-directory-inner">
+            <div class="exercise-directory-heading">
+              <h3 class="exercise-directory-title group-hover:text-[var(--lime)] transition-colors">${esc(e.name)}</h3>
+              ${e.isCustom ? `<button class="icon-btn delete-exercise exercise-delete-btn text-rose-400 bg-rose-500/10 border-rose-500/20 hover:bg-rose-500/20 transition-colors !w-9 !h-9" data-id="${e.id}" aria-label="Hapus ${esc(e.name)}" title="Hapus Exercise"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : ""}
             </div>
-          </div>
-          <div class="flex items-center gap-2 mt-4 pt-3 border-t border-[var(--line)]">
-            <span class="chip text-xs font-bold text-[var(--lime)] bg-[var(--lime)]/10 border-[var(--lime)]/20">${esc(e.muscle)}</span>
-            ${e.isCustom ? `<span class="chip text-xs font-bold text-amber-400 bg-amber-500/10 border-amber-500/20 ml-auto">Custom</span>` : ""}
+            <p class="exercise-directory-equipment"><i data-lucide="wrench" class="exercise-wrench-icon"></i>${esc(e.equipment || "—")}</p>
+            <div class="exercise-directory-divider"></div>
+            <div class="exercise-directory-footer">
+              <span class="exercise-directory-chip">${esc(e.muscle)}</span>
+              ${e.isCustom ? `<span class="exercise-directory-chip exercise-custom-chip">Custom</span>` : ""}
+            </div>
           </div>
         `;
         list.appendChild(el);
       });
       lucide.createIcons();
-    }
+    } 
+
     
     function populateSelects(){
       const workoutOptsContainer = document.getElementById("workout-routine-options");
@@ -1233,36 +1323,76 @@ const KEY = "gymflow-v3";
     function endWorkout(){
       const a=state.activeSession;
       if(!a)return;
+
       const totalSets=a.exercises.reduce((n,x)=>n+x.sets.filter(s=>s.completedAt).length,0);
-      if(!totalSets){toast(currentLanguage()==="en" ? "Complete at least one set before ending the workout." : "Selesaikan minimal satu set sebelum mengakhiri workout.");return;}
-      
+      if(!totalSets){
+        toast(currentLanguage()==="en" ? "Complete at least one set before ending the workout." : "Selesaikan minimal satu set sebelum mengakhiri workout.");
+        return;
+      }
+
       const durationSeconds = elapsed();
       const durationMinutes = durationSeconds / 60;
       const userWeight = state.settings.weight || 65;
       const caloriesBurned = Math.round(0.05 * userWeight * durationMinutes);
+      const endedAt = new Date().toISOString();
 
-      const endedAt=new Date().toISOString();
-      state.history.unshift({id:a.id,routineId:a.routineId,startedAt:a.startedAt,endedAt,duration:durationSeconds,exercises:a.exercises,caloriesBurned});
+      const summary = calculateSessionMetrics(a, state.history);
+      const historyEntry = {
+        id:a.id,
+        routineId:a.routineId,
+        startedAt:a.startedAt,
+        endedAt,
+        duration:durationSeconds,
+        exercises:a.exercises,
+        caloriesBurned,
+        stats: {
+          totalSets: summary.totalSets,
+          totalReps: summary.totalReps,
+          totalVolume: summary.totalVolume,
+          totalExercises: summary.totalExercises,
+          muscleGroups: summary.muscleGroups,
+          personalRecords: summary.personalRecords
+        }
+      };
+
+      state.history.unshift(historyEntry);
       state.activeSession=null;
       save();
+
       renderDashboard();
+      renderHistory();
       navigate("history");
-      toast(currentLanguage()==="en" ? `Workout saved. Burned ±${caloriesBurned} kcal!` : `Workout tersimpan. Membakar ±${caloriesBurned} kkal!`);
+      renderStatisticsAnalytics();
+
+      toast(currentLanguage()==="en"
+        ? `Workout saved. Burned ±${caloriesBurned} kcal!`
+        : `Workout tersimpan. Membakar ±${caloriesBurned} kkal!`);
+
+      setTimeout(() => openWorkoutSummary(historyEntry), 140);
     }
 
     function renderOverviewMetrics(){
-      let sessions = state.history;
+      const sessions = Array.isArray(state.history) ? state.history : [];
+      const totalCalories = sessions.reduce((n,s)=>n+(Number(s.caloriesBurned)||0),0);
+      const totalSeconds = sessions.reduce((n,s)=>n+(Number(s.duration)||0),0);
+      const avgSeconds = sessions.length ? Math.round(totalSeconds / sessions.length) : 0;
 
-      const totalCalories = sessions.reduce((n,s)=>n+(s.caloriesBurned||0),0);
-      const totalSeconds = sessions.reduce((n,s)=>n+(s.duration||0),0);
-      const avgSeconds = sessions.length > 0 ? Math.round(totalSeconds / sessions.length) : 0;
+      const setText = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value;
+      };
 
-      document.getElementById("history-session-count").textContent = sessions.length;
-      document.getElementById("history-calories").textContent = fmtKkal(totalCalories);
-      document.getElementById("history-total-time").textContent = formatTimeDetailed(totalSeconds);
-      document.getElementById("history-avg-duration").textContent = formatTimeDetailed(avgSeconds);
-      document.getElementById("workouts-logged-count").textContent = currentLanguage()==="en" ? `${state.history.length} workouts logged` : `${state.history.length} workout tercatat`;
-      
+      const loggedCopy = currentLanguage()==="en"
+        ? `${sessions.length} workouts logged`
+        : `${sessions.length} workout tercatat`;
+      setText("workouts-logged-count", loggedCopy);
+      setText("progress-workouts-logged-copy", loggedCopy);
+      setText("history-session-count", sessions.length);
+      setText("history-calories", fmtKkal(totalCalories));
+      setText("history-total-time", formatTimeDetailed(totalSeconds));
+      setText("history-avg-duration", formatTimeDetailed(avgSeconds));
+      renderProgressPulse(sessions);
+
       renderOverviewCharts();
     }
     
@@ -1320,6 +1450,46 @@ const KEY = "gymflow-v3";
     function renderOverviewCharts() {
       renderWorkoutsPerWeekChart();
       renderCaloriesPerWorkoutChart();
+      renderVolumeTrendChart();
+    }
+
+    function renderProgressPulse(sessions) {
+      const safe = Array.isArray(sessions) ? sessions : [];
+      const thisWeekEl = document.getElementById("progress-this-week");
+      const streakEl = document.getElementById("progress-current-streak");
+      if (!thisWeekEl || !streakEl) return;
+
+      const now = new Date();
+      const day = now.getDay();
+      const mondayOffset = day === 0 ? -6 : 1 - day;
+      const monday = new Date(now);
+      monday.setDate(now.getDate() + mondayOffset);
+      monday.setHours(0, 0, 0, 0);
+      const weekCount = safe.filter(s => {
+        const d = new Date(s.endedAt);
+        return !Number.isNaN(d.getTime()) && d >= monday;
+      }).length;
+
+      const uniqueDays = [...new Set(safe
+        .map(s => { const d = new Date(s.endedAt); return Number.isNaN(d.getTime()) ? null : new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); })
+        .filter(Boolean))].sort((a,b)=>b-a);
+
+      let streak = 0;
+      if (uniqueDays.length) {
+        const latest = new Date(uniqueDays[0]);
+        const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const gap = Math.round((todayMidnight - latest) / 86400000);
+        if (gap <= 1) {
+          streak = 1;
+          for (let i=1;i<uniqueDays.length;i++) {
+            const diff = Math.round((uniqueDays[i-1] - uniqueDays[i]) / 86400000);
+            if (diff === 1) streak++; else break;
+          }
+        }
+      }
+
+      thisWeekEl.textContent = weekCount;
+      streakEl.textContent = streak;
     }
 
     function renderWorkoutsPerWeekChart() {
@@ -1383,6 +1553,58 @@ const KEY = "gymflow-v3";
       area.innerHTML = svgContent;
     }
 
+    function renderVolumeTrendChart() {
+      const area = document.getElementById("volume-trend-chart");
+      if (!area) return;
+      const history = [...state.history].sort((a,b)=>new Date(a.endedAt)-new Date(b.endedAt)).slice(-8);
+      if (!history.length) {
+        area.innerHTML = `<div class="gf-chart-empty">Belum ada data volume workout.</div>`;
+        return;
+      }
+
+      const getVolume = (s) => {
+        if (s.stats?.totalVolume != null) return Number(s.stats.totalVolume)||0;
+        return (s.exercises||[]).reduce((sum, ex) => {
+          const info = analyticsExerciseInfo(ex.exerciseId, ex.name);
+          return sum + (ex.sets||[]).filter(x=>x.completedAt).reduce((n,x)=>{
+            if (info.muscle === "Cardio") return n;
+            return n + (Number(x.reps)||0) * (Number(x.weight)||0);
+          },0);
+        },0);
+      };
+
+      const values = history.map(getVolume);
+      const max = Math.max(1,...values);
+      const w=720,h=220,padX=34,padY=26;
+      const plotW=w-padX*2, plotH=h-padY-34;
+      const step=history.length===1 ? 0 : plotW/(history.length-1);
+      const points=values.map((v,i)=>{
+        const x=padX + step*i;
+        const y=(h-34) - (v/max)*plotH;
+        return {x,y,v,date:new Date(history[i].endedAt)};
+      });
+      const coords=points.map(p=>`${p.x},${p.y}`).join(" ");
+      const areaPoints=`${padX},${h-34} ${coords} ${padX+step*(history.length-1)},${h-34}`;
+      const monthNames=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+      area.innerHTML=`
+        <svg viewBox="0 0 ${w} ${h}" class="gf-premium-chart" role="img" aria-label="Volume trend">
+          <defs>
+            <linearGradient id="gfVolumeFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#88F914" stop-opacity="0.26"/>
+              <stop offset="100%" stop-color="#88F914" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+          <line x1="${padX}" y1="${h-34}" x2="${w-padX}" y2="${h-34}" stroke="var(--line)"/>
+          <line x1="${padX}" y1="${padY+plotH*0.5}" x2="${w-padX}" y2="${padY+plotH*0.5}" stroke="var(--line)" stroke-dasharray="4 5" opacity=".65"/>
+          <polygon points="${areaPoints}" fill="url(#gfVolumeFill)"/>
+          <polyline points="${coords}" fill="none" stroke="#88F914" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+          ${points.map(p=>`<circle cx="${p.x}" cy="${p.y}" r="4.5" fill="#0c100d" stroke="#88F914" stroke-width="2.5"><title>${analyticsFormatVolume(p.v)}</title></circle>`).join("")}
+          ${points.map(p=>`<text x="${p.x}" y="${h-10}" text-anchor="middle" fill="var(--muted)" font-size="10">${p.date.getDate()} ${monthNames[p.date.getMonth()]}</text>`).join("")}
+          <text x="${padX}" y="${padY-6}" fill="var(--muted)" font-size="10">${analyticsFormatVolume(max)}</text>
+        </svg>`;
+    }
+
     function renderCaloriesPerWorkoutChart() {
       const area = document.getElementById("calories-per-workout-chart");
       const history = [...state.history].sort((a,b) => new Date(a.endedAt) - new Date(b.endedAt)).slice(-8);
@@ -1440,129 +1662,1777 @@ const KEY = "gymflow-v3";
       area.innerHTML = svgContent;
     }
 
-    function exportPDF() {
-      if(state.history.length === 0) {
-        toast("Belum ada data history latihan untuk didownload.");
-        return;
+
+    /* ==================== WORKOUT STATISTICS & BODY VISUAL ==================== */
+    const ANALYTICS_MUSCLES = [
+      "chest","shoulders","biceps","triceps","back","abs","glutes","quads","hamstrings","calves"
+    ];
+    const ANALYTICS_LABELS = {
+      chest:"Chest", shoulders:"Shoulders", biceps:"Biceps", triceps:"Triceps",
+      back:"Back", abs:"Abs", glutes:"Glutes", quads:"Quads", hamstrings:"Hamstrings", calves:"Calves"
+    };
+    const ANALYTICS_PERIOD_LABELS = { "7d":"7 hari", "30d":"30 hari", "90d":"3 bulan", "1y":"1 tahun", "all":"All time" };
+
+    function analyticsPeriodLabel() {
+      return currentLanguage()==="en"
+        ? ({ "7d":"7 days", "30d":"30 days", "90d":"3 months", "1y":"1 year", "all":"All time" }[analyticsPeriod] || "30 days")
+        : (ANALYTICS_PERIOD_LABELS[analyticsPeriod] || "30 hari");
+    }
+
+    function getFilteredAnalyticsHistory(period=analyticsPeriod) {
+      const history = Array.isArray(state.history) ? state.history : [];
+      if (period === "all") return [...history];
+
+      const days = period === "7d" ? 7 : period === "30d" ? 30 : period === "90d" ? 90 : 365;
+      const cutoff = Date.now() - days * 86400000;
+      return history.filter(s => new Date(s.endedAt || s.startedAt || 0).getTime() >= cutoff);
+    }
+
+    function analyticsExerciseInfo(exerciseId, fallbackName="Exercise") {
+      const found = exerciseById(exerciseId);
+      return found || { id:exerciseId, name:fallbackName, muscle:"Core", equipment:"" };
+    }
+
+    function deriveAnalyticsMuscles(exercise) {
+      const text = `${exercise?.name || ""} ${exercise?.muscle || ""}`.toLowerCase();
+      const muscle = String(exercise?.muscle || "").toLowerCase();
+
+      if (muscle === "cardio" || /treadmill|cycling|running|jog|elliptical|stair/.test(text)) return [];
+      if (muscle === "chest" || /bench press|chest press|chest fly|push up|push-up|pec deck|cable fly|incline press|decline press/.test(text)) return ["chest"];
+      if (muscle === "back" || /lat pulldown|pull up|pull-up|chin up|row|deadlift|pullover|face pull/.test(text)) return ["back"];
+      if (muscle === "shoulders" || /shoulder press|lateral raise|front raise|rear delt|arnold press|upright row|overhead press/.test(text)) return ["shoulders"];
+      if (muscle === "arms" || /bicep|curl/.test(text)) return text.includes("tricep") || /pushdown|skull crusher|triceps/.test(text) ? ["triceps"] : ["biceps"];
+      if (muscle === "legs" || /squat|leg press|leg extension|leg curl|lunge|split squat|calf raise|hip thrust|glute|hamstring|romanian deadlift|rdl/.test(text)) {
+        if (/calf/.test(text)) return ["calves"];
+        if (/hip thrust|glute|kickback|abductor/.test(text)) return ["glutes"];
+        if (/leg curl|hamstring|rdl|romanian deadlift/.test(text)) return ["hamstrings"];
+        if (/squat|leg press|leg extension|lunge|split squat/.test(text)) return ["quads","glutes"];
+        return ["quads"];
       }
-      toast("Sedang meracik file PDF...");
-      const now = new Date();
-      let sessionsToExport = [];
-      const todayStr = now.toDateString();
-      sessionsToExport = state.history.filter(s => new Date(s.endedAt).toDateString() === todayStr);
-      let titleText = "Laporan Progress Harian";
-      let subtitleText = `Tanggal: ${now.toLocaleDateString("id-ID", {dateStyle: 'full'})}`;
+      if (muscle === "core" || /crunch|sit up|sit-up|plank|ab wheel|russian twist|leg raise|abs|oblique/.test(text)) return ["abs"];
+      return [];
+    }
 
-      if(sessionsToExport.length === 0) {
-        sessionsToExport = [state.history[0]];
-        subtitleText = `Sesi terakhir (${new Date(state.history[0].endedAt).toLocaleDateString("id-ID")})`;
-      }
+    function buildAnalyticsModel(period=analyticsPeriod) {
+      const sessions = getFilteredAnalyticsHistory(period);
+      const muscleMap = {};
+      ANALYTICS_MUSCLES.forEach(key => muscleMap[key] = { key, sets:0, workouts:new Set(), volume:0, reps:0 });
 
-      const totalCalories = sessionsToExport.reduce((acc, s) => acc + (s.caloriesBurned || 0), 0);
-      const totalSesi = sessionsToExport.length;
+      const exerciseMap = new Map();
+      let totalSets=0, totalReps=0, totalVolume=0, totalDuration=0;
+      const prs = [];
+      const previousMaxByExercise = new Map();
 
-      let htmlContent = `
-        <div id="pdf-render-container" style="font-family: 'DM Sans', sans-serif; color: #17221b; padding: 32px; background: #ffffff; width: 100%; box-sizing: border-box; position: relative; min-height: 1000px;">
-          <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); opacity: 0.5; z-index: 0; pointer-events: none; text-align: center;">
-            <img src="logo_newwm.jpg" alt="Watermark Logo" style="width: 380px; height: 380px; object-fit: contain; filter: grayscale(100%);">
-          </div>
-          <div style="position: relative; z-index: 1;">
-            <div style="border-bottom: 3px solid #bcf04a; padding-bottom: 18px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: flex-end;">
-              <div>
-                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
-                  <div style="width: 32px; height: 32px; background: #111923; border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden;">
-                    <img src="new_logoprofile.png" alt="Logo" style="width: 100%; height: 100%; object-fit: cover;">
-                  </div>
-                  <h1 style="margin: 0; font-size: 20px; font-weight: 800; color: #111923; letter-spacing: -0.02em;">GYMFlow REPORT</h1>
-                </div>
-                <p style="margin: 0; font-size: 13px; color: #647469; font-weight: 600;">${titleText}</p>
-              </div>
-              <div style="text-align: right;">
-                <p style="margin: 0; font-size: 11px; color: #647469; font-weight: 500;">${subtitleText}</p>
-                <p style="margin: 3px 0 0 0; font-size: 11px; color: #17221b;">Nama: <strong>${esc(state.settings.userName)}</strong> &bull; Berat: <strong>${state.settings.weight} ${state.settings.weightUnit}</strong></p>
-              </div>
-            </div>
-
-            <div style="display: flex; gap: 14px; margin-bottom: 24px;">
-              <div style="flex: 1; background: #f8faf8; padding: 14px 18px; border-radius: 12px; border: 1px solid #d6e0d7; box-shadow: 0 2px 6px rgba(0,0,0,0.02);">
-                <span style="font-size: 10px; color: #647469; font-weight: 700; display: block; letter-spacing: 0.05em;">TOTAL SESI</span>
-                <strong style="font-size: 20px; color: #17221b; display: block; margin-top: 2px;">${totalSesi} Sesi</strong>
-              </div>
-              <div style="flex: 1; background: #f8faf8; padding: 14px 18px; border-radius: 12px; border: 1px solid #d6e0d7; box-shadow: 0 2px 6px rgba(0,0,0,0.02);">
-                <span style="font-size: 10px; color: #647469; font-weight: 700; display: block; letter-spacing: 0.05em;">KALORI TERBAKAR</span>
-                <strong style="font-size: 20px; color: #17221b; display: block; margin-top: 2px;">${fmtKkal(totalCalories)}</strong>
-              </div>
-            </div>
-
-            <h3 style="font-size: 14px; font-weight: 800; margin-bottom: 12px; color: #111923; text-transform: uppercase; letter-spacing: 0.03em;">Rincian Sesi Latihan</h3>
-      `;
-
-      sessionsToExport.forEach((s, idx) => {
-        const rName = routineById(s.routineId)?.name || "Custom Workout";
-        const dObj = new Date(s.endedAt);
-        const dateStr = isNaN(dObj.getTime()) ? s.endedAt : dObj.toLocaleDateString("id-ID", {day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'});
-        
-        htmlContent += `
-          <div style="margin-bottom: 14px; background: #ffffff; border: 1px solid #d6e0d7; border-radius: 12px; padding: 14px 16px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid #edf2ed; padding-bottom: 8px;">
-              <div>
-                <strong style="font-size: 13px; color: #111923;">#${idx + 1} &bull; ${esc(rName)}</strong>
-                <span style="font-size: 11px; color: #647469; margin-left: 10px;">(±${s.caloriesBurned || 0} kkal)</span>
-              </div>
-              <span style="font-size: 11px; color: #647469; background: #f0f4f0; padding: 3px 8px; border-radius: 6px;">${dateStr} (${formatDuration(s.duration)})</span>
-            </div>
-        `;
-
-        s.exercises.forEach(ex => {
-          const exObj = exerciseById(ex.exerciseId);
-          const isCardio = exObj && exObj.muscle === "Cardio";
-          const completedSets = ex.sets.filter(st => st.completedAt);
-          if(completedSets.length > 0) {
-            htmlContent += `
-              <div style="font-size: 12px; margin-top: 6px; padding: 6px 10px; background: #fbfcfb; border-radius: 8px; border-left: 3px solid #bcf04a; display: flex; justify-content: space-between; align-items: center;">
-                <span style="font-weight: 700; color: #17221b;">${esc(exObj?.name || "Exercise")}</span>
-                <span style="color: #4a5568; font-weight: 500;">${completedSets.map(st => isCardio ? `${st.reps} mnt · ${st.weight} km` : `${st.reps} reps × ${st.weight} kg`).join(" &nbsp;|&nbsp; ")}</span>
-              </div>
-            `;
-          }
+      // Build all-time prior max load for PR detection.
+      [...(state.history || [])].sort((a,b)=>new Date(a.endedAt||0)-new Date(b.endedAt||0)).forEach(session => {
+        (session.exercises || []).forEach(ex => {
+          const info = analyticsExerciseInfo(ex.exerciseId, ex.name);
+          const maxWeight = Math.max(0, ...(ex.sets || []).filter(s=>s.completedAt).map(s=>Number(s.weight)||0));
+          const prev = previousMaxByExercise.get(info.id) || 0;
+          if (maxWeight > prev) previousMaxByExercise.set(info.id, maxWeight);
         });
-        htmlContent += `</div>`;
       });
 
-      htmlContent += `
-            <div style="margin-top: 40px; text-align: center; font-size: 10px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 14px;">
-              Dokumen ini digenerate secara otomatis oleh sistem GYMFlow Tracker &copy; 2026
-            </div>
+      sessions.forEach(session => {
+        totalDuration += Number(session.duration) || 0;
+        const sessionSeenExercises = new Set();
+
+        (session.exercises || []).forEach(ex => {
+          const info = analyticsExerciseInfo(ex.exerciseId, ex.name);
+          const completedSets = (ex.sets || []).filter(s => s.completedAt);
+          if (!completedSets.length) return;
+
+          sessionSeenExercises.add(info.id);
+          const currentMaxWeight = Math.max(0, ...completedSets.map(s => Number(s.weight)||0));
+          const reps = completedSets.reduce((n,s)=>n+(Number(s.reps)||0),0);
+          const volume = completedSets.reduce((n,s)=>{
+            const weight = Number(s.weight)||0;
+            const r = Number(s.reps)||0;
+            return n + (info.muscle === "Cardio" ? 0 : weight * r);
+          },0);
+
+          totalSets += completedSets.length;
+          totalReps += reps;
+          totalVolume += volume;
+
+          if (!exerciseMap.has(info.id)) exerciseMap.set(info.id, {
+            id:info.id, name:info.name || "Exercise", muscle:info.muscle || "Core",
+            sessions:new Set(), sets:0, reps:0, volume:0, maxWeight:0
+          });
+          const exStat = exerciseMap.get(info.id);
+          exStat.sessions.add(session.id);
+          exStat.sets += completedSets.length;
+          exStat.reps += reps;
+          exStat.volume += volume;
+          exStat.maxWeight = Math.max(exStat.maxWeight, currentMaxWeight);
+
+          deriveAnalyticsMuscles(info).forEach(mKey=>{
+            const target = muscleMap[mKey];
+            if (!target) return;
+            target.sets += completedSets.length;
+            target.reps += reps;
+            target.volume += volume;
+            target.workouts.add(session.id);
+          });
+
+          // PRs only when this session is the first/all-time best load for an exercise.
+          const allTimePreviousSessions = (state.history || []).filter(s=>s.id !== session.id && new Date(s.endedAt||0) < new Date(session.endedAt||0));
+          const prevMax = Math.max(0, ...allTimePreviousSessions.flatMap(s => (s.exercises || []).filter(x=>x.exerciseId===info.id).flatMap(x => (x.sets || []).filter(y=>y.completedAt).map(y=>Number(y.weight)||0))));
+          if (currentMaxWeight > 0 && currentMaxWeight > prevMax) {
+            prs.push({
+              exerciseId: info.id,
+              name: info.name || "Exercise",
+              weight: currentMaxWeight,
+              date: session.endedAt,
+              sessionId: session.id
+            });
+          }
+        });
+
+        if (sessionSeenExercises.size) {
+          // no-op: session exists for workout count
+        }
+      });
+
+      const muscleStats = Object.values(muscleMap).map(m=>({
+        ...m, workouts:m.workouts.size
+      }));
+      muscleStats.sort((a,b)=>b.sets-a.sets || b.volume-a.volume);
+
+      const exerciseStats = [...exerciseMap.values()].map(e=>({
+        ...e, sessions:e.sessions.size
+      })).sort((a,b)=>b.sessions-a.sessions || b.sets-a.sets || b.volume-a.volume);
+
+      // De-duplicate PRs to the latest record for each exercise.
+      const latestPrMap = new Map();
+      prs.sort((a,b)=>new Date(b.date)-new Date(a.date)).forEach(pr=>{
+        if (!latestPrMap.has(pr.exerciseId)) latestPrMap.set(pr.exerciseId, pr);
+      });
+
+      const uniqueExercises = exerciseStats.length;
+
+      return {
+        sessions, totalWorkouts:sessions.length, totalExercises:uniqueExercises, totalSets,
+        totalReps, totalVolume, totalDuration, muscleStats, exerciseStats,
+        topMuscle:muscleStats[0] || null,
+        personalRecords:[...latestPrMap.values()].slice(0,8)
+      };
+    }
+
+    function analyticsStatNumber(n) {
+      return new Intl.NumberFormat("id-ID", { maximumFractionDigits:1 }).format(Number(n)||0);
+    }
+
+    function analyticsFormatVolume(n) {
+      return `${analyticsStatNumber(n)} kg`;
+    }
+
+    function analyticsSvgBody(side="front") {
+      const isFront = side === "front";
+      const body = isFront ? `
+        <!-- muscular front silhouette -->
+        <g class="gf-anatomy-silhouette" fill="url(#gfBodyBase-${side})">
+          <circle cx="120" cy="24" r="17"/>
+          <path d="M108 42 C112 38 116 37 120 37 C124 37 128 38 132 42 L131 56 C127 60 113 60 109 56 Z"/>
+          <path d="M96 56 C102 50 110 48 120 51 C130 48 138 50 144 56
+                   C151 62 154 77 153 91 C152 111 146 130 137 148
+                   C132 157 127 162 120 164 C113 162 108 157 103 148
+                   C94 130 88 111 87 91 C86 77 89 62 96 56 Z"/>
+          <path d="M94 58 C85 58 78 64 74 76 L68 117 C67 124 71 131 78 132
+                   C84 132 89 127 89 120 L95 92 Z"/>
+          <path d="M146 58 C155 58 162 64 166 76 L172 117 C173 124 169 131 162 132
+                   C156 132 151 127 151 120 L145 92 Z"/>
+          <path d="M101 151 C107 147 114 148 119 152 L118 199 C114 205 108 207 102 203 L97 177 Z"/>
+          <path d="M121 152 C126 148 133 147 139 151 L143 177 L138 203 C132 207 126 205 122 199 Z"/>
+          <path d="M98 199 C104 195 112 197 118 202 L116 286 C112 298 104 301 95 294 Z"/>
+          <path d="M122 202 C128 197 136 195 142 199 L145 294 C136 301 128 298 124 286 Z"/>
+          <path d="M95 288 C103 284 111 287 116 292 L113 374 C108 381 99 381 94 373 Z"/>
+          <path d="M124 292 C129 287 137 284 145 288 L146 373 C141 381 132 381 127 374 Z"/>
+          <path d="M91 372 C99 368 108 369 114 374 L116 384 C108 388 98 387 90 382 Z"/>
+          <path d="M126 374 C132 369 141 368 149 372 L150 382 C142 387 132 388 124 384 Z"/>
+        </g>
+
+        <g class="gf-anatomy-contours">
+          <path d="M95 62 Q106 52 120 59 Q107 69 100 88 Q94 77 95 62Z" class="gf-muscle-region" data-muscle="shoulders"/>
+          <path d="M145 62 Q134 52 120 59 Q133 69 140 88 Q146 77 145 62Z" class="gf-muscle-region" data-muscle="shoulders"/>
+          <path d="M99 68 Q109 57 120 62 L120 104 Q109 110 98 101 Q94 84 99 68Z" class="gf-muscle-region" data-muscle="chest"/>
+          <path d="M141 68 Q131 57 120 62 L120 104 Q131 110 142 101 Q146 84 141 68Z" class="gf-muscle-region" data-muscle="chest"/>
+          <path d="M90 68 Q97 60 102 69 L99 112 Q95 119 88 113 Q87 91 90 68Z" class="gf-muscle-region" data-muscle="biceps"/>
+          <path d="M150 68 Q143 60 138 69 L141 112 Q145 119 152 113 Q153 91 150 68Z" class="gf-muscle-region" data-muscle="biceps"/>
+          <path d="M80 75 Q86 64 91 70 L89 114 Q85 120 78 113 Q76 94 80 75Z" class="gf-muscle-region" data-muscle="triceps"/>
+          <path d="M160 75 Q154 64 149 70 L151 114 Q155 120 162 113 Q164 94 160 75Z" class="gf-muscle-region" data-muscle="triceps"/>
+          <path d="M105 104 Q112 99 120 103 L120 148 Q112 153 104 147 Z" class="gf-muscle-region" data-muscle="abs"/>
+          <path d="M135 104 Q128 99 120 103 L120 148 Q128 153 136 147 Z" class="gf-muscle-region" data-muscle="abs"/>
+          <path d="M103 153 Q111 149 119 153 L117 203 Q110 208 103 202 Z" class="gf-muscle-region" data-muscle="quads"/>
+          <path d="M121 153 Q129 149 138 153 L137 202 Q130 208 122 203 Z" class="gf-muscle-region" data-muscle="quads"/>
+          <path d="M98 201 Q108 195 117 202 L115 286 Q108 299 98 291 Z" class="gf-muscle-region" data-muscle="quads"/>
+          <path d="M123 202 Q132 195 142 201 L141 291 Q132 299 125 286 Z" class="gf-muscle-region" data-muscle="quads"/>
+          <path d="M97 289 Q106 285 115 292 L113 374 Q107 380 98 374 Z" class="gf-muscle-region" data-muscle="calves"/>
+          <path d="M125 292 Q134 285 143 289 L142 374 Q133 380 127 374 Z" class="gf-muscle-region" data-muscle="calves"/>
+        </g>
+
+        <g class="gf-anatomy-lines" aria-hidden="true">
+          <path d="M120 64 L120 154"/>
+          <path d="M102 107 Q111 112 117 110"/>
+          <path d="M138 107 Q129 112 123 110"/>
+          <path d="M106 158 Q120 165 134 158"/>
+          <path d="M104 215 Q111 220 116 216"/>
+          <path d="M124 216 Q129 220 136 215"/>
+          <path d="M102 297 Q109 301 114 297"/>
+          <path d="M126 297 Q131 301 138 297"/>
+        </g>` : `
+        <!-- muscular back silhouette -->
+        <g class="gf-anatomy-silhouette" fill="url(#gfBodyBase-${side})">
+          <circle cx="120" cy="24" r="17"/>
+          <path d="M108 42 C112 38 116 37 120 37 C124 37 128 38 132 42 L131 56 C127 60 113 60 109 56 Z"/>
+          <path d="M96 56 C102 50 110 48 120 51 C130 48 138 50 144 56
+                   C151 63 154 78 153 92 C152 113 146 131 137 149
+                   C131 158 126 163 120 165 C114 163 109 158 103 149
+                   C94 131 88 113 87 92 C86 78 89 63 96 56 Z"/>
+          <path d="M94 58 C85 58 78 64 74 76 L68 117 C67 124 71 131 78 132
+                   C84 132 89 127 89 120 L95 92 Z"/>
+          <path d="M146 58 C155 58 162 64 166 76 L172 117 C173 124 169 131 162 132
+                   C156 132 151 127 151 120 L145 92 Z"/>
+          <path d="M101 150 C108 145 114 149 120 154 C126 149 132 145 139 150 L143 182
+                   C136 191 129 197 120 199 C111 197 104 191 97 182 Z"/>
+          <path d="M98 195 C105 191 112 195 118 200 L116 286 C112 298 104 301 95 294 Z"/>
+          <path d="M122 200 C128 195 135 191 142 195 L145 294 C136 301 128 298 124 286 Z"/>
+          <path d="M95 288 C103 284 111 287 116 292 L113 374 C108 381 99 381 94 373 Z"/>
+          <path d="M124 292 C129 287 137 284 145 288 L146 373 C141 381 132 381 127 374 Z"/>
+          <path d="M91 372 C99 368 108 369 114 374 L116 384 C108 388 98 387 90 382 Z"/>
+          <path d="M126 374 C132 369 141 368 149 372 L150 382 C142 387 132 388 124 384 Z"/>
+        </g>
+
+        <g class="gf-anatomy-contours">
+          <path d="M95 62 Q106 52 120 59 Q107 69 100 88 Q94 77 95 62Z" class="gf-muscle-region" data-muscle="shoulders"/>
+          <path d="M145 62 Q134 52 120 59 Q133 69 140 88 Q146 77 145 62Z" class="gf-muscle-region" data-muscle="shoulders"/>
+          <path d="M99 67 Q110 56 120 62 Q130 56 141 67 L139 119 Q130 137 120 141 Q110 137 101 119 Z" class="gf-muscle-region" data-muscle="back"/>
+          <path d="M90 69 Q97 61 102 69 L99 111 Q95 118 88 112 Q87 91 90 69Z" class="gf-muscle-region" data-muscle="triceps"/>
+          <path d="M150 69 Q143 61 138 69 L141 111 Q145 118 152 112 Q153 91 150 69Z" class="gf-muscle-region" data-muscle="triceps"/>
+          <path d="M80 75 Q86 64 91 70 L89 114 Q85 120 78 113 Q76 94 80 75Z" class="gf-muscle-region" data-muscle="biceps"/>
+          <path d="M160 75 Q154 64 149 70 L151 114 Q155 120 162 113 Q164 94 160 75Z" class="gf-muscle-region" data-muscle="biceps"/>
+          <path d="M103 145 Q111 139 120 146 Q129 139 137 145 L136 177 Q128 186 120 188 Q112 186 104 177 Z" class="gf-muscle-region" data-muscle="glutes"/>
+          <path d="M100 176 Q109 170 118 177 L116 286 Q111 298 102 291 Z" class="gf-muscle-region" data-muscle="hamstrings"/>
+          <path d="M122 177 Q131 170 140 176 L141 291 Q132 298 124 286 Z" class="gf-muscle-region" data-muscle="hamstrings"/>
+          <path d="M97 289 Q106 285 115 292 L113 374 Q107 380 98 374 Z" class="gf-muscle-region" data-muscle="calves"/>
+          <path d="M125 292 Q134 285 143 289 L142 374 Q133 380 127 374 Z" class="gf-muscle-region" data-muscle="calves"/>
+        </g>
+
+        <g class="gf-anatomy-lines" aria-hidden="true">
+          <path d="M120 60 L120 142"/>
+          <path d="M101 75 Q120 91 139 75"/>
+          <path d="M103 117 Q120 128 137 117"/>
+          <path d="M104 151 Q120 160 136 151"/>
+          <path d="M104 218 Q111 222 116 218"/>
+          <path d="M124 218 Q129 222 136 217"/>
+          <path d="M102 297 Q109 301 114 297"/>
+          <path d="M126 297 Q131 301 138 297"/>
+        </g>`;
+
+      return `<svg viewBox="0 0 240 400" class="gf-body-svg-canvas gf-muscular-canvas" role="img" aria-label="${isFront ? "Front muscular body muscle map" : "Back muscular body muscle map"}">
+        <defs>
+          <linearGradient id="gfBodyBase-${side}" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#5e7788"/>
+            <stop offset="45%" stop-color="#3e5665"/>
+            <stop offset="100%" stop-color="#1a242d"/>
+          </linearGradient>
+        </defs>
+        ${body}
+      </svg>`;
+    }
+
+    function applyBodyHeatmap(model) {
+      const maxSets = Math.max(1, ...model.muscleStats.map(m=>m.sets));
+      const setMap = Object.fromEntries(model.muscleStats.map(m=>[m.key, m.sets]));
+      document.querySelectorAll(".gf-muscle-region").forEach(el=>{
+        const key = el.dataset.muscle;
+        const sets = setMap[key] || 0;
+        const ratio = sets / maxSets;
+        const intensity = sets === 0 ? 0 : 0.16 + ratio * 0.78;
+        el.style.fill = `rgba(136,249,20,${intensity})`;
+        el.classList.toggle("selected", key === selectedAnalyticsMuscle);
+        el.setAttribute("tabindex","0");
+        el.setAttribute("role","button");
+        el.setAttribute("aria-label", ANALYTICS_LABELS[key] || key);
+        el.dataset.sets = sets;
+      });
+    }
+
+    function selectAnalyticsMuscle(muscleKey) {
+      selectedAnalyticsMuscle = muscleKey;
+      const model = buildAnalyticsModel(analyticsPeriod);
+      applyBodyHeatmap(model);
+
+      const stat = model.muscleStats.find(m=>m.key===muscleKey) || {sets:0,workouts:0,volume:0};
+      const maxSets = Math.max(1,...model.muscleStats.map(m=>m.sets));
+      const ratio = stat.sets / maxSets;
+      const intensity = stat.sets === 0 ? "No training" : ratio >= .66 ? "High" : ratio >= .33 ? "Moderate" : "Light";
+
+      const selectedName = document.getElementById("selected-muscle-name");
+      const selectedSets = document.getElementById("selected-muscle-sets");
+      const selectedWorkouts = document.getElementById("selected-muscle-workouts");
+      const selectedVolume = document.getElementById("selected-muscle-volume");
+      const selectedIntensity = document.getElementById("selected-muscle-intensity");
+      if (selectedName) selectedName.textContent = ANALYTICS_LABELS[muscleKey] || muscleKey;
+      if (selectedSets) selectedSets.textContent = analyticsStatNumber(stat.sets);
+      if (selectedWorkouts) selectedWorkouts.textContent = analyticsStatNumber(stat.workouts);
+      if (selectedVolume) selectedVolume.textContent = analyticsFormatVolume(stat.volume);
+      if (selectedIntensity) selectedIntensity.textContent = intensity;
+
+      const related = model.exerciseStats.filter(e=>deriveAnalyticsMuscles(e).includes(muscleKey)).slice(0,5);
+      const breakdown = document.getElementById("muscle-breakdown-list");
+      if (!breakdown) return;
+      breakdown.innerHTML = related.length ? related.map(e=>`
+        <button type="button" class="gf-breakdown-row" data-muscle-exercise="${esc(e.id)}">
+          <span>
+            <strong>${esc(e.name)}</strong>
+            <small>${e.sessions} ${currentLanguage()==="en" ? "workouts" : "workout"} · ${e.sets} ${currentLanguage()==="en" ? "sets" : "set"}</small>
+          </span>
+          <span class="gf-breakdown-value">${analyticsFormatVolume(e.volume)}</span>
+        </button>
+      `).join("") : `<div class="gf-empty-mini">${currentLanguage()==="en" ? "No completed sets for this muscle in the selected period." : "Belum ada completed set untuk muscle ini pada periode yang dipilih."}</div>`;
+      lucide.createIcons();
+    }
+
+    function renderMuscleDistribution(model) {
+      if (!document.getElementById("muscle-distribution-chart")) return;
+      const area = document.getElementById("muscle-distribution-chart");
+      const stats = model.muscleStats.filter(m=>m.sets>0).slice(0,8);
+      if (!stats.length) {
+        area.innerHTML = `<div class="gf-empty-mini">${currentLanguage()==="en" ? "Complete a workout to build your muscle distribution." : "Selesaikan workout untuk mulai membangun distribusi muscle."}</div>`;
+        return;
+      }
+      const maxSets = Math.max(1, ...stats.map(s=>s.sets));
+      area.innerHTML = stats.map(s=>`
+        <button type="button" class="gf-muscle-bar ${s.key===selectedAnalyticsMuscle ? "active" : ""}" data-muscle-select="${s.key}">
+          <span class="gf-muscle-bar-top"><span>${ANALYTICS_LABELS[s.key]}</span><b>${s.sets}</b></span>
+          <span class="gf-muscle-bar-track"><i style="width:${Math.max(3,(s.sets/maxSets)*100)}%"></i></span>
+        </button>
+      `).join("");
+    }
+
+    function renderTrainingLoad(model) {
+      if (!document.getElementById("training-load-chart")) return;
+      const area = document.getElementById("training-load-chart");
+      const sessions = [...model.sessions].sort((a,b)=>new Date(a.endedAt)-new Date(b.endedAt)).slice(-8);
+      if (!sessions.length) {
+        area.innerHTML = `<div class="gf-empty-mini">${currentLanguage()==="en" ? "No training load yet." : "Belum ada training load."}</div>`;
+        return;
+      }
+      const volumes = sessions.map(s=>{
+        if (s.stats?.totalVolume != null) return Number(s.stats.totalVolume)||0;
+        return (s.exercises||[]).reduce((n,ex)=>{
+          const info=analyticsExerciseInfo(ex.exerciseId,ex.name);
+          return n + (ex.sets||[]).filter(x=>x.completedAt).reduce((sn,x)=>sn + (info.muscle==="Cardio" ? 0 : (Number(x.reps)||0)*(Number(x.weight)||0)),0);
+        },0);
+      });
+      const max = Math.max(1,...volumes);
+      area.innerHTML = `
+        <div class="gf-load-chart-inner">
+          ${sessions.map((s,i)=>{
+            const h = Math.max(8,(volumes[i]/max)*100);
+            const d = new Date(s.endedAt);
+            return `<div class="gf-load-col" title="${analyticsFormatVolume(volumes[i])}">
+              <span class="gf-load-value">${analyticsStatNumber(volumes[i])}</span>
+              <i style="height:${h}%"></i>
+              <small>${d.toLocaleDateString(currentLanguage()==="en"?"en-US":"id-ID",{day:"numeric",month:"short"})}</small>
+            </div>`;
+          }).join("")}
+        </div>`;
+    }
+
+    function renderMainExercises(model) {
+      const list = document.getElementById("main-exercises-list");
+      const stats = model.exerciseStats.slice(0,7);
+      if (!stats.length) {
+        list.innerHTML = `<div class="gf-empty-mini">${currentLanguage()==="en" ? "No exercises logged for this period." : "Belum ada exercise pada periode ini."}</div>`;
+        return;
+      }
+      list.innerHTML = stats.map((e,i)=>`
+        <div class="gf-exercise-row">
+          <span class="gf-rank">${i+1}</span>
+          <div class="gf-exercise-row-main">
+            <strong>${esc(e.name)}</strong>
+            <span>${e.sessions} ${currentLanguage()==="en" ? "workouts" : "workout"} · ${e.sets} ${currentLanguage()==="en" ? "sets" : "set"} · ${analyticsFormatVolume(e.volume)}</span>
+          </div>
+          <span class="gf-pr-mini">${e.maxWeight>0 ? analyticsStatNumber(e.maxWeight)+" kg" : "—"}</span>
+        </div>
+      `).join("");
+    }
+
+    function renderPersonalRecords(model) {
+      if (!document.getElementById("personal-records-list")) return;
+      const list = document.getElementById("personal-records-list");
+      const prs = model.personalRecords;
+      document.getElementById("stat-pr-count").textContent = `${prs.length} PR`;
+      if (!prs.length) {
+        list.innerHTML = `<div class="gf-empty-mini">${currentLanguage()==="en" ? "Personal records will appear when you beat an earlier best load." : "Personal record akan muncul saat kamu melewati beban terbaik sebelumnya."}</div>`;
+        return;
+      }
+      list.innerHTML = prs.map(pr=>`
+        <div class="gf-pr-row">
+          <span class="gf-pr-star">★</span>
+          <div>
+            <strong>${esc(pr.name)}</strong>
+            <span>${new Date(pr.date).toLocaleDateString(currentLanguage()==="en"?"en-US":"id-ID",{day:"numeric",month:"short",year:"numeric"})}</span>
+          </div>
+          <b>${analyticsStatNumber(pr.weight)} kg</b>
+        </div>
+      `).join("");
+    }
+
+    function syncStatisticsPeriodSelect() {
+      const wrapper = document.getElementById("statistics-period-select");
+      const hidden = document.getElementById("statistics-period");
+      if (!wrapper || !hidden) return;
+      const option = wrapper.querySelector(`.custom-option[data-value="${analyticsPeriod}"]`);
+      const label = wrapper.querySelector(".selected-label");
+      wrapper.querySelectorAll(".custom-option").forEach(opt => opt.classList.toggle("selected", opt.dataset.value === analyticsPeriod));
+      if (option && label) label.textContent = option.textContent;
+      hidden.value = analyticsPeriod;
+    }
+
+    function renderStatisticsAnalytics() {
+      if (!document.getElementById("progress-statistics-content")) return;
+      const model = buildAnalyticsModel(analyticsPeriod);
+      const periodLabel = analyticsPeriodLabel();
+      const avgVolume = model.totalWorkouts ? model.totalVolume / model.totalWorkouts : 0;
+
+      syncStatisticsPeriodSelect();
+      document.getElementById("statistics-data-label").textContent = periodLabel;
+      document.getElementById("stat-total-workouts").textContent = analyticsStatNumber(model.totalWorkouts);
+      document.getElementById("stat-total-sets").textContent = analyticsStatNumber(model.totalSets);
+      document.getElementById("stat-total-volume").textContent = analyticsFormatVolume(model.totalVolume);
+      document.getElementById("stat-pr-count").textContent = analyticsStatNumber(model.personalRecords.length);
+      document.getElementById("stat-top-muscle").textContent = model.topMuscle ? `${ANALYTICS_LABELS[model.topMuscle.key]} · ${model.topMuscle.sets} sets` : "—";
+      document.getElementById("stat-avg-volume").textContent = analyticsFormatVolume(avgVolume);
+      document.getElementById("stat-top-exercise").textContent = model.exerciseStats[0]?.name || "—";
+
+      renderMainExercises(model);
+      lucide.createIcons();
+    }
+
+    function calculateSessionMetrics(session, previousHistory=[]) {
+      const summary = {
+        totalSets:0,totalReps:0,totalVolume:0,totalExercises:0,
+        duration:Number(session?.duration)||0,muscleGroups:[],personalRecords:[],
+        exercises:[]
+      };
+      const previousMaxByExercise = new Map();
+
+      previousHistory.forEach(h=>{
+        (h.exercises||[]).forEach(ex=>{
+          const maxW = Math.max(0,...(ex.sets||[]).filter(s=>s.completedAt).map(s=>Number(s.weight)||0));
+          if(maxW>0) previousMaxByExercise.set(ex.exerciseId, Math.max(previousMaxByExercise.get(ex.exerciseId)||0,maxW));
+        });
+      });
+
+      const muscleSet = new Set();
+      (session?.exercises||[]).forEach(ex=>{
+        const info = analyticsExerciseInfo(ex.exerciseId, ex.name);
+        const completed = (ex.sets||[]).filter(s=>s.completedAt);
+        if(!completed.length) return;
+        summary.totalExercises++;
+        const reps = completed.reduce((n,s)=>n+(Number(s.reps)||0),0);
+        const volume = completed.reduce((n,s)=>n + (info.muscle==="Cardio" ? 0 : (Number(s.reps)||0)*(Number(s.weight)||0)),0);
+        const best = Math.max(0,...completed.map(s=>Number(s.weight)||0));
+
+        summary.totalSets += completed.length;
+        summary.totalReps += reps;
+        summary.totalVolume += volume;
+        const groups = deriveAnalyticsMuscles(info);
+        groups.forEach(g=>muscleSet.add(g));
+
+        if(best > 0 && best > (previousMaxByExercise.get(info.id)||0)) {
+          summary.personalRecords.push({name:info.name,weight:best,exerciseId:info.id});
+        }
+
+        summary.exercises.push({
+          name:info.name,
+          sets:completed.length,
+          reps,
+          volume,
+          bestWeight:best
+        });
+      });
+      summary.muscleGroups=[...muscleSet];
+      return summary;
+    }
+
+    function buildWorkoutSummaryHTML(historyEntry) {
+      const model = calculateSessionMetrics(historyEntry, state.history.filter(s=>s.id!==historyEntry.id));
+      const routineName = routineById(historyEntry.routineId)?.name || "Workout";
+      const date = new Date(historyEntry.endedAt || Date.now());
+      const muscles = model.muscleGroups.map(k=>ANALYTICS_LABELS[k]).join(" · ") || "—";
+      return `
+        <div class="gf-summary-hero">
+          <div>
+            <span class="gf-eyebrow">WORKOUT COMPLETE</span>
+            <h2 class="gf-summary-title">${esc(routineName)}</h2>
+            <p class="muted text-xs mt-1">${date.toLocaleDateString(currentLanguage()==="en"?"en-US":"id-ID",{dateStyle:"full"})}</p>
+          </div>
+          <span class="gf-summary-check"><i data-lucide="check"></i></span>
+        </div>
+        <div class="gf-summary-metrics">
+          <div><span>Duration</span><b>${formatTimeDetailed(historyEntry.duration||0)}</b></div>
+          <div><span>Volume</span><b>${analyticsFormatVolume(model.totalVolume)}</b></div>
+          <div><span>Sets</span><b>${model.totalSets}</b></div>
+          <div><span>Exercises</span><b>${model.totalExercises}</b></div>
+          <div><span>PR</span><b>${model.personalRecords.length}</b></div>
+        </div>
+        <div class="gf-summary-block">
+          <span class="gf-eyebrow">MUSCLE GROUPS</span>
+          <div class="gf-summary-tags">${muscles.split(" · ").filter(Boolean).map(m=>`<span>${esc(m)}</span>`).join("") || "<span>—</span>"}</div>
+        </div>
+        <div class="gf-summary-block">
+          <span class="gf-eyebrow">EXERCISES</span>
+          <div class="gf-summary-exercises">
+            ${model.exercises.map(e=>`<div><span>${esc(e.name)}</span><b>${e.sets} sets</b></div>`).join("") || `<div class="muted text-sm">—</div>`}
           </div>
         </div>
       `;
+    }
 
-      const wrapper = document.createElement("div");
-      wrapper.style.position = "absolute";
-      wrapper.style.left = "-9999px";
-      wrapper.style.top = "0";
-      wrapper.style.width = "794px";
-      wrapper.innerHTML = htmlContent;
-      document.body.appendChild(wrapper);
+    function ensureAnalyticsModals() {
+      if (document.getElementById("workout-summary-modal")) return;
 
-      const opt = {
-        margin:       10,
-        filename:     `GYMFlow-Progress-${now.toISOString().slice(0,10)}.pdf`,
-        image:        { type: 'jpeg', quality: 0.98 },
-        html2canvas:  { scale: 2, useCORS: true, logging: false },
-        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      document.body.insertAdjacentHTML("beforeend", `
+        <div id="workout-summary-modal" class="modal-layer gf-analytics-modal" role="dialog" aria-modal="true" aria-labelledby="workout-summary-title">
+          <div class="modal gf-summary-modal">
+            <div class="flex justify-between gap-3 items-center mb-4">
+              <div>
+                <span class="gf-eyebrow">SUMMARY</span>
+                <h2 id="workout-summary-title" class="font-extrabold text-xl">Workout Summary</h2>
+              </div>
+              <button type="button" class="icon-btn" data-gf-close="workout-summary-modal" aria-label="Tutup summary"><i data-lucide="x"></i></button>
+            </div>
+            <div id="workout-summary-content"></div>
+            <div class="flex flex-col sm:flex-row gap-2 mt-5">
+              <button id="summary-export-btn" class="lime-btn flex-1"><i data-lucide="download" class="w-4 h-4 inline mr-1"></i> Export Summary</button>
+              <button type="button" class="secondary-btn flex-1" data-gf-close="workout-summary-modal">Done</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="analytics-export-modal" class="modal-layer gf-analytics-modal" role="dialog" aria-modal="true" aria-labelledby="analytics-export-title">
+          <div class="modal gf-export-modal">
+            <div class="flex justify-between gap-3 items-center mb-4">
+              <div>
+                <span class="gf-eyebrow">EXPORT / SHARE</span>
+                <h2 id="analytics-export-title" class="font-extrabold text-xl">Export Preview</h2>
+              </div>
+              <button type="button" class="icon-btn" data-gf-close="analytics-export-modal" aria-label="Tutup export"><i data-lucide="x"></i></button>
+            </div>
+            <div class="gf-export-controls-grid mb-4">
+              <div class="gf-export-select-group">
+                <label class="gf-form-label" for="export-report-type">Report</label>
+                <div id="export-report-type" class="custom-select-wrapper gf-export-select">
+                  <div class="field custom-select-trigger gf-export-select-trigger" tabindex="0" role="button" aria-haspopup="listbox" aria-expanded="false">
+                    <span class="selected-label">Full Report</span>
+                    <i data-lucide="chevron-down" class="gf-export-select-chevron" aria-hidden="true"></i>
+                  </div>
+                  <div class="custom-options" role="listbox">
+                    <div class="custom-option" data-value="daily" role="option">Workout Hari Ini</div>
+                    <div class="custom-option" data-value="summary" role="option">Workout Summary</div>
+                    <div class="custom-option" data-value="body" role="option">Muscle Statistics</div>
+                    <div class="custom-option" data-value="load" role="option">Training Load / Volume</div>
+                    <div class="custom-option selected" data-value="full" role="option">Full Report</div>
+                  </div>
+                </div>
+              </div>
+              <div class="gf-export-select-group">
+                <label class="gf-form-label" for="export-format">Format</label>
+                <div id="export-format" class="custom-select-wrapper gf-export-select">
+                  <div class="field custom-select-trigger gf-export-select-trigger" tabindex="0" role="button" aria-haspopup="listbox" aria-expanded="false">
+                    <span class="selected-label">PDF</span>
+                    <i data-lucide="chevron-down" class="gf-export-select-chevron" aria-hidden="true"></i>
+                  </div>
+                  <div class="custom-options" role="listbox">
+                    <div class="custom-option" data-value="png" role="option">PNG <span class="gf-export-option-note">Transparent</span></div>
+                    <div class="custom-option" data-value="jpg" role="option">JPG <span class="gf-export-option-note">Solid background</span></div>
+                    <div class="custom-option selected" data-value="pdf" role="option">PDF <span class="gf-export-option-note">A4 report</span></div>
+                  </div>
+                </div>
+              </div>
+              <div class="gf-export-select-group">
+                <label class="gf-form-label" for="export-size">Size</label>
+                <div id="export-size" class="custom-select-wrapper gf-export-select">
+                  <div class="field custom-select-trigger gf-export-select-trigger" tabindex="0" role="button" aria-haspopup="listbox" aria-expanded="false">
+                    <span class="selected-label">Auto</span>
+                    <i data-lucide="chevron-down" class="gf-export-select-chevron" aria-hidden="true"></i>
+                  </div>
+                  <div class="custom-options" role="listbox">
+                    <div class="custom-option selected" data-value="auto" role="option">Auto <span class="gf-export-option-note">Fit report</span></div>
+                    <div class="custom-option" data-value="square" role="option">Social Square <span class="gf-export-option-note">1080×1080</span></div>
+                    <div class="custom-option" data-value="portrait" role="option">Social Portrait <span class="gf-export-option-note">1080×1350</span></div>
+                    <div class="custom-option" data-value="story" role="option">Story <span class="gf-export-option-note">1080×1920</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div id="analytics-export-preview" class="gf-export-preview"></div>
+            <div class="flex flex-col sm:flex-row gap-2 mt-4">
+              <button id="analytics-export-download" class="lime-btn flex-1"><i data-lucide="download" class="w-4 h-4 inline mr-1"></i> Download</button>
+              <button id="analytics-export-share" class="secondary-btn flex-1"><i data-lucide="share-2" class="w-4 h-4 inline mr-1"></i> Share</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="photo-workout-export-modal" class="modal-layer gf-photo-export-layer" role="dialog" aria-modal="true" aria-labelledby="photo-workout-export-title">
+          <div class="modal gf-photo-export-modal">
+            <div class="gf-photo-export-header">
+              <div>
+                <span class="gf-eyebrow">PHOTO WORKOUT EXPORT</span>
+                <h2 id="photo-workout-export-title" class="font-extrabold text-xl tracking-tight">Share your workout</h2>
+                <p id="gf-photo-export-subtitle" class="gf-photo-export-subtitle">Fullscreen · data dari GYMFlow</p>
+              </div>
+              <button type="button" class="icon-btn" data-gf-close="photo-workout-export-modal" aria-label="Tutup photo export"><i data-lucide="x"></i></button>
+            </div>
+
+            <div class="gf-photo-export-layout">
+              <div class="gf-photo-export-stage-wrap">
+                <div id="gf-photo-export-preview" class="gf-photo-export-preview">
+                  <canvas id="gf-photo-export-canvas" width="1920" height="1080" aria-label="Preview workout export fullscreen"></canvas>
+                  <div id="gf-photo-export-empty" class="gf-photo-export-empty">
+                    <i data-lucide="image-plus"></i>
+                    <strong>Upload a workout photo</strong>
+                    <span>Portrait, landscape, atau square. Foto tidak akan diubah rasio aslinya.</span>
+                    <button id="gf-photo-export-empty-upload" type="button" class="lime-btn px-4">Choose Photo</button>
+                  </div>
+                </div>
+                <div class="gf-photo-export-stage-meta">
+                  <span id="gf-photo-export-size-meta">Fullscreen · 1920 × 1080 px</span>
+                  <span id="gf-photo-export-live-meta">Classic · JPG</span>
+                </div>
+              </div>
+
+              <div class="gf-photo-export-controls">
+                <input id="gf-photo-export-file" type="file" accept="image/jpeg,image/png,image/webp,image/*" hidden>
+
+                <section class="gf-photo-control-group">
+                  <div class="gf-photo-control-head"><span>Photo</span><span class="muted text-xs">position & zoom</span></div>
+                  <div class="flex gap-2">
+                    <button id="gf-photo-export-upload" type="button" class="secondary-btn flex-1"><i data-lucide="upload" class="w-4 h-4 inline mr-1"></i> Import Photo</button>
+                    <button id="gf-photo-export-reset" type="button" class="secondary-btn" title="Reset photo"><i data-lucide="scan"></i></button>
+                  </div>
+                  <div class="gf-photo-zoom-row">
+                    <button id="gf-photo-export-zoom-out" type="button" class="icon-btn !w-10 !h-10" aria-label="Zoom out"><i data-lucide="minus"></i></button>
+                    <input id="gf-photo-export-zoom" type="range" min="1" max="2.2" step="0.01" value="1" aria-label="Photo zoom">
+                    <button id="gf-photo-export-zoom-in" type="button" class="icon-btn !w-10 !h-10" aria-label="Zoom in"><i data-lucide="plus"></i></button>
+                  </div>
+                  <small id="gf-photo-export-zoom-label" class="muted text-xs">Zoom 100%</small>
+                </section>
+
+                <section class="gf-photo-control-group">
+                  <div class="gf-photo-control-head"><span>Template</span><span class="muted text-xs">overlay layout</span></div>
+                  <div id="gf-photo-export-templates" class="gf-photo-template-grid">
+                    <button type="button" class="gf-photo-template active" data-template="classic"><strong>Classic</strong><span>Balanced stats</span></button>
+                    <button type="button" class="gf-photo-template" data-template="minimal"><strong>Minimal</strong><span>Clean & bold</span></button>
+                    <button type="button" class="gf-photo-template" data-template="performance"><strong>Performance</strong><span>Load & PR</span></button>
+                    <button type="button" class="gf-photo-template" data-template="full"><strong>Full Stats</strong><span>More data</span></button>
+                  </div>
+                </section>
+
+                <section class="gf-photo-control-group">
+                  <div class="gf-photo-control-head"><span>Canvas</span><span id="gf-photo-size-helper" class="muted text-xs">auto device aspect</span></div>
+                  <div class="gf-photo-size-mode-grid">
+                    <button type="button" class="gf-photo-size-mode active" data-size-mode="fullscreen"><strong>Fullscreen</strong><span>Match your device</span></button>
+                    <button type="button" class="gf-photo-size-mode" data-size-mode="custom"><strong>Custom Size</strong><span>Choose pixels</span></button>
+                  </div>
+
+                  <div id="gf-photo-custom-size-panel" class="gf-photo-custom-size-panel hidden">
+                    <div class="gf-photo-preset-grid">
+                      <button type="button" class="gf-photo-preset active" data-preset="square"><strong>Square</strong><span>1080×1080</span></button>
+                      <button type="button" class="gf-photo-preset" data-preset="portrait"><strong>Portrait</strong><span>1080×1350</span></button>
+                      <button type="button" class="gf-photo-preset" data-preset="story"><strong>Story</strong><span>1080×1920</span></button>
+                      <button type="button" class="gf-photo-preset" data-preset="landscape"><strong>Landscape</strong><span>1920×1080</span></button>
+                      <button type="button" class="gf-photo-preset" data-preset="custom"><strong>Custom</strong><span>Set your own size</span></button>
+                    </div>
+
+                    <div class="gf-photo-dimensions-grid">
+                      <label><span>Width</span><input id="gf-photo-export-width" type="number" min="320" max="8192" step="1" value="1080" inputmode="numeric"></label>
+                      <span class="gf-photo-dimensions-x">×</span>
+                      <label><span>Height</span><input id="gf-photo-export-height" type="number" min="320" max="8192" step="1" value="1080" inputmode="numeric"></label>
+                    </div>
+                    <div class="gf-photo-ratio-note">Aspect ratio <strong id="gf-photo-export-ratio">1:1</strong></div>
+                  </div>
+                </section>
+
+                <section class="gf-photo-control-group">
+                  <div class="gf-photo-control-head"><span>Format</span><span id="gf-photo-format-helper" class="muted text-xs">image export</span></div>
+                  <div class="gf-photo-format-grid">
+                    <button type="button" class="gf-photo-format active" data-format="jpg"><strong>JPG</strong><span>Photo background</span></button>
+                    <button type="button" class="gf-photo-format" data-format="png"><strong>PNG</strong><span>Alpha supported</span></button>
+                  </div>
+                  <label class="gf-photo-transparent-row">
+                    <input id="gf-photo-export-transparent" type="checkbox">
+                    <span>Transparent PNG (hide photo background)</span>
+                  </label>
+                </section>
+
+                <div class="gf-photo-export-actions">
+                  <button id="gf-photo-export-download" type="button" class="lime-btn flex-1"><i data-lucide="download" class="w-4 h-4 inline mr-1"></i> Download</button>
+                  <button id="gf-photo-export-share" type="button" class="secondary-btn flex-1"><i data-lucide="share-2" class="w-4 h-4 inline mr-1"></i> Share</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `);
+
+      document.querySelectorAll("[data-gf-close]").forEach(btn=>{
+        btn.addEventListener("click",()=>closeModal(btn.dataset.gfClose));
+      });
+      document.getElementById("statistics-export-btn")?.addEventListener("click",()=>openPhotoWorkoutExportModal());
+      document.getElementById("summary-export-btn").addEventListener("click",()=>{
+        const entry = window.__gfLastWorkoutSummary;
+        openExportModal("summary", entry);
+      });
+      initCustomSelect("export-report-type", () => renderExportPreview());
+      initCustomSelect("export-format", () => renderExportPreview());
+      initCustomSelect("export-size", () => renderExportPreview());
+      syncExportCustomSelects();
+      document.getElementById("analytics-export-download").addEventListener("click",downloadAnalyticsExport);
+      document.getElementById("analytics-export-share").addEventListener("click",shareAnalyticsExport);
+      initPhotoWorkoutExport();
+      lucide.createIcons();
+    }
+
+    function openWorkoutSummary(historyEntry) {
+      ensureAnalyticsModals();
+      window.__gfLastWorkoutSummary = historyEntry;
+      document.getElementById("workout-summary-content").innerHTML = buildWorkoutSummaryHTML(historyEntry);
+      lucide.createIcons();
+      openModal("workout-summary-modal");
+    }
+
+    function getTodaySession() {
+      const today = new Date().toDateString();
+      return state.history.find(s=>new Date(s.endedAt).toDateString()===today) || null;
+    }
+
+    function getLatestSession() {
+      return state.history[0] || null;
+    }
+
+function buildExportBrandMark(size = 38) {
+  const s = Number(size) || 38;
+
+  return `
+    <img
+      class="gf-export-logo-mark"
+      src="new_logoprofile.png"
+      alt="GYMFlow"
+      width="${s}"
+      height="${s}"
+    >
+  `;
+}
+
+    function buildExportCard(type, specificSession=null) {
+      const model = buildAnalyticsModel(analyticsPeriod);
+      const session = type === "summary" && specificSession ? specificSession : (type === "daily" ? getTodaySession() : getLatestSession());
+      const titleMap = {
+        daily:"Workout Hari Ini", summary:"Workout Summary", body:"Muscle Statistics",
+        load:"Training Load / Volume", full:"GYMFlow Full Report"
+      };
+      const title = titleMap[type] || "GYMFlow Report";
+      const userName = state.settings.userName || "GYMFlow User";
+      const exportDate = new Date().toLocaleDateString(
+        currentLanguage()==="en" ? "en-US" : "id-ID",
+        { dateStyle:"medium" }
+      );
+
+      let bodyHtml = "";
+
+      if ((type==="daily" || type==="summary") && session) {
+        const sm = calculateSessionMetrics(session, state.history.filter(s=>s.id!==session.id));
+        bodyHtml = `
+          <section class="gf-export-section gf-export-feature-card">
+            <div class="gf-export-section-head">
+              <div>
+                <span class="gf-eyebrow">WORKOUT OVERVIEW</span>
+                <h2 class="gf-export-section-title">${esc(title)}</h2>
+              </div>
+              <span class="gf-export-period">${exportDate}</span>
+            </div>
+
+            <div class="gf-export-kpis">
+              <div><small>Duration</small><b>${formatTimeDetailed(session.duration||0)}</b><span class="gf-export-kpi-icon">◷</span></div>
+              <div><small>Volume</small><b>${analyticsFormatVolume(sm.totalVolume)}</b><span class="gf-export-kpi-icon">↗</span></div>
+              <div><small>Sets</small><b>${sm.totalSets}</b><span class="gf-export-kpi-icon">◫</span></div>
+              <div><small>Exercises</small><b>${sm.totalExercises}</b><span class="gf-export-kpi-icon">✦</span></div>
+              <div><small>Personal Records</small><b>${sm.personalRecords.length}</b><span class="gf-export-kpi-icon">★</span></div>
+            </div>
+
+            <div class="gf-export-two-col">
+              <div class="gf-export-subcard">
+                <span class="gf-eyebrow">MUSCLE GROUPS</span>
+                <div class="gf-export-tags">
+                  ${sm.muscleGroups.map(k=>`<span>${esc(ANALYTICS_LABELS[k])}</span>`).join("") || "<span>—</span>"}
+                </div>
+              </div>
+              <div class="gf-export-subcard">
+                <span class="gf-eyebrow">WORKOUT DATE</span>
+                <strong class="gf-export-date-value">${new Date(session.endedAt||Date.now()).toLocaleDateString(currentLanguage()==="en"?"en-US":"id-ID",{dateStyle:"long"})}</strong>
+              </div>
+            </div>
+
+            <div class="gf-export-section-inner">
+              <div class="gf-export-section-head">
+                <span class="gf-eyebrow">EXERCISES</span>
+                <span class="gf-export-meta">${sm.totalExercises} exercise</span>
+              </div>
+              <div class="gf-export-list">
+                ${sm.exercises.map(e=>`<div><span>${esc(e.name)}</span><b>${e.sets} sets · ${e.reps} reps · ${analyticsFormatVolume(e.volume)}</b></div>`).join("") || "<div>—</div>"}
+              </div>
+            </div>
+          </section>`;
+      } else if (type==="daily" || type==="summary") {
+        bodyHtml = `
+          <section class="gf-export-empty-card">
+            <span class="gf-eyebrow">WORKOUT OVERVIEW</span>
+            <strong>Belum ada workout untuk report ini.</strong>
+            <p>Selesaikan workout terlebih dahulu agar ringkasan dapat diekspor.</p>
+          </section>`;
+      }
+
+      if (type==="body" || type==="full") {
+        const topMuscles = model.muscleStats.filter(m=>m.sets>0).slice(0,8);
+        bodyHtml += `
+          <section class="gf-export-section gf-export-feature-card">
+            <div class="gf-export-section-head">
+              <div>
+                <span class="gf-eyebrow">MUSCLE ANALYTICS</span>
+                <h2 class="gf-export-section-title">Muscle Statistics</h2>
+              </div>
+              <span class="gf-export-period">${analyticsPeriodLabel()}</span>
+            </div>
+
+            <div class="gf-export-list gf-export-ranked-list">
+              ${topMuscles.map((m,idx)=>`
+                <div>
+                  <span><i class="gf-export-rank">${idx+1}</i>${esc(ANALYTICS_LABELS[m.key])}</span>
+                  <b>${m.sets} sets · ${m.workouts} workouts · ${analyticsFormatVolume(m.volume)}</b>
+                </div>
+              `).join("") || "<div>No muscle data</div>"}
+            </div>
+          </section>`;
+      }
+
+      if (type==="load" || type==="full") {
+        const sessions = [...model.sessions].sort((a,b)=>new Date(a.endedAt)-new Date(b.endedAt)).slice(-8);
+        bodyHtml += `
+          <section class="gf-export-section gf-export-feature-card">
+            <div class="gf-export-section-head">
+              <div>
+                <span class="gf-eyebrow">TRAINING LOAD</span>
+                <h2 class="gf-export-section-title">Training Load & Volume</h2>
+              </div>
+              <span class="gf-export-period">${analyticsPeriodLabel()}</span>
+            </div>
+
+            <div class="gf-export-kpis gf-export-kpis-5">
+              <div><small>Total volume</small><b>${analyticsFormatVolume(model.totalVolume)}</b></div>
+              <div><small>Total sets</small><b>${analyticsStatNumber(model.totalSets)}</b></div>
+              <div><small>Total reps</small><b>${analyticsStatNumber(model.totalReps)}</b></div>
+              <div><small>Workouts</small><b>${analyticsStatNumber(model.totalWorkouts)}</b></div>
+              <div><small>Total duration</small><b>${formatTimeDetailed(model.totalDuration)}</b></div>
+            </div>
+
+            <div class="gf-export-section-inner">
+              <div class="gf-export-section-head">
+                <span class="gf-eyebrow">RECENT SESSIONS</span>
+                <span class="gf-export-meta">${sessions.length} sessions</span>
+              </div>
+              <div class="gf-export-list">
+                ${sessions.map(s=>{
+                  const sm=calculateSessionMetrics(s,[]);
+                  const d=new Date(s.endedAt);
+                  return `<div><span>${d.toLocaleDateString(currentLanguage()==="en"?"en-US":"id-ID",{day:"numeric",month:"short",year:"numeric"})}</span><b>${analyticsFormatVolume(sm.totalVolume)}</b></div>`;
+                }).join("") || "<div>No training load data</div>"}
+              </div>
+            </div>
+          </section>`;
+      }
+
+      if (type==="full") {
+        bodyHtml += `
+          <section class="gf-export-section gf-export-feature-card">
+            <div class="gf-export-section-head">
+              <div>
+                <span class="gf-eyebrow">PERSONAL RECORDS</span>
+                <h2 class="gf-export-section-title">Latest Personal Records</h2>
+              </div>
+              <span class="gf-export-period">${model.personalRecords.length} PR</span>
+            </div>
+            <div class="gf-export-list">
+              ${model.personalRecords.map(pr=>`<div><span>${esc(pr.name)}</span><b>${analyticsStatNumber(pr.weight)} kg</b></div>`).join("") || "<div>No PR data</div>"}
+            </div>
+          </section>`;
+      }
+
+      return `
+        <div class="gf-export-canvas" data-export-type="${type}">
+          <header class="gf-export-header">
+            <div class="gf-export-brand-lockup">
+              ${buildExportBrandMark(44)}
+              <div>
+                <span class="gf-export-brand">GYMFlow</span>
+                <span class="gf-export-tagline">YOUR FITNESS JOURNEY</span>
+              </div>
+            </div>
+            <div class="gf-export-header-meta">
+              <span class="gf-export-meta-label">EXPORT DATE</span>
+              <strong>${exportDate}</strong>
+              <span class="gf-export-user">${esc(userName)}</span>
+            </div>
+          </header>
+
+          <div class="gf-export-intro">
+            <span class="gf-eyebrow">GYMFLOW REPORT</span>
+            <h1>${esc(title)}</h1>
+            <p>${analyticsPeriodLabel()} <span>•</span> Performance summary generated from your workout data.</p>
+          </div>
+
+          ${bodyHtml || `<div class="gf-export-empty-card"><strong>Belum ada data untuk report ini.</strong></div>`}
+
+          <footer class="gf-export-footer">
+            <div class="gf-export-footer-brand">
+              ${buildExportBrandMark(24)}
+              <span>GYMFlow</span>
+            </div>
+            <span>Your Fitness Journey · ${exportDate}</span>
+          </footer>
+        </div>`;
+    }
+
+
+    function getCustomSelectValue(wrapperId, fallback="") {
+      const wrapper = document.getElementById(wrapperId);
+      if (!wrapper) return fallback;
+      return wrapper.querySelector(".custom-option.selected")?.dataset.value || fallback;
+    }
+
+    function setCustomSelectValue(wrapperId, value) {
+      const wrapper = document.getElementById(wrapperId);
+      if (!wrapper) return;
+      const options = wrapper.querySelectorAll(".custom-option");
+      let selected = null;
+      options.forEach(option => {
+        const isSelected = option.dataset.value === value;
+        option.classList.toggle("selected", isSelected);
+        if (isSelected) selected = option;
+      });
+      if (selected) {
+        const label = wrapper.querySelector(".selected-label");
+        if (label) label.textContent = selected.childNodes[0]?.textContent?.trim() || selected.textContent.trim();
+      }
+      const trigger = wrapper.querySelector(".custom-select-trigger");
+      if (trigger) trigger.setAttribute("aria-expanded", "false");
+      wrapper.classList.remove("open");
+    }
+
+    function syncExportCustomSelects() {
+      const type = document.getElementById("export-report-type");
+      const format = document.getElementById("export-format");
+      const size = document.getElementById("export-size");
+      if (!type || !format || !size) return;
+      setCustomSelectValue("export-report-type", type.querySelector(".custom-option.selected")?.dataset.value || "full");
+      setCustomSelectValue("export-format", format.querySelector(".custom-option.selected")?.dataset.value || "pdf");
+      setCustomSelectValue("export-size", size.querySelector(".custom-option.selected")?.dataset.value || "auto");
+    }
+
+    function openExportModal(type="full", session=null) {
+      ensureAnalyticsModals();
+      setCustomSelectValue("export-report-type", type);
+      setCustomSelectValue("export-format", "pdf");
+      setCustomSelectValue("export-size", "auto");
+      window.__gfExportSession = session || null;
+      renderExportPreview();
+      openModal("analytics-export-modal");
+    }
+
+    function renderExportPreview() {
+      const type = getCustomSelectValue("export-report-type", "full");
+      const format = getCustomSelectValue("export-format", "pdf");
+      const preview = document.getElementById("analytics-export-preview");
+      if (!preview) return;
+      preview.classList.toggle("gf-export-preview-transparent", format === "png");
+      preview.innerHTML = buildExportCard(type, window.__gfExportSession || null);
+    }
+
+    function getExportFilename(type, ext) {
+      const date = new Date().toISOString().slice(0,10);
+      return `GYMFlow-${type}-${date}.${ext}`;
+    }
+
+    
+    async function buildCaptureNode(exportFormat="pdf") {
+      const preview = document.querySelector("#analytics-export-preview .gf-export-canvas");
+      if (!preview) throw new Error("Preview tidak tersedia.");
+
+      const clone = preview.cloneNode(true);
+      const size = getCustomSelectValue("export-size", "auto");
+      const map = {
+        square:[1080,1080],
+        portrait:[1080,1350],
+        story:[1080,1920]
+      };
+      const [w,h] = map[size] || [860, null];
+
+      // Render in a stable off-screen layer. Avoid position:fixed/viewport
+      // because html2canvas may capture a blank/partial canvas in that case.
+      clone.style.width = `${w}px`;
+      clone.style.maxWidth = "none";
+      clone.style.minHeight = h ? `${h}px` : "0";
+      clone.style.height = "auto";
+      clone.style.position = "fixed";
+      clone.style.left = "0";
+      clone.style.top = "0";
+      clone.style.zIndex = "-2";
+      clone.style.pointerEvents = "none";
+      clone.style.visibility = "visible";
+      clone.style.opacity = "1";
+      clone.style.transform = "none";
+      clone.style.overflow = "visible";
+      clone.style.boxSizing = "border-box";
+      clone.classList.add("gf-export-capture");
+      if (exportFormat === "png") clone.classList.add("gf-export-transparent");
+
+      document.body.appendChild(clone);
+
+      // Wait for layout, fonts and images before rasterizing.
+      if (document.fonts?.ready) {
+        try { await document.fonts.ready; } catch (_) {}
+      }
+      const images = [...clone.querySelectorAll("img")];
+      await Promise.all(images.map(img => {
+        if (img.complete) return Promise.resolve();
+        return new Promise(resolve => {
+          img.addEventListener("load", resolve, {once:true});
+          img.addEventListener("error", resolve, {once:true});
+        });
+      }));
+      await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+
+      return clone;
+    }
+
+    async function renderExportCanvas(target) {
+      if (typeof html2canvas !== "function") throw new Error("PNG/PDF engine belum tersedia.");
+      const width = Math.ceil(target.scrollWidth || target.offsetWidth || 860);
+      const height = Math.ceil(target.scrollHeight || target.offsetHeight || 1200);
+      if (!width || !height) throw new Error("Konten export kosong.");
+
+      return html2canvas(target, {
+        scale: Math.min(2, Math.max(1.5, window.devicePixelRatio || 1)),
+        width,
+        height,
+        backgroundColor:target.classList.contains("gf-export-transparent") ? null : "#ffffff",
+        useCORS:true,
+        foreignObjectRendering:false,
+        allowTaint:false,
+        logging:false,
+        scrollX:0,
+        scrollY:0,
+        windowWidth:width,
+        windowHeight:height
+      });
+    }
+
+    async function canvasToPdfBlob(canvas) {
+      const jspdfApi = window.jspdf?.jsPDF;
+      if (!jspdfApi) throw new Error("PDF engine belum tersedia.");
+
+      const pdf = new jspdfApi("p", "mm", "a4");
+      const pageW = 210;
+      const pageH = 297;
+      const margin = 8;
+      const usableW = pageW - margin * 2;
+      const usableH = pageH - margin * 2;
+      const imageH = canvas.height * usableW / canvas.width;
+      const slicePx = Math.max(1, Math.floor(canvas.height * usableH / imageH));
+
+      let offsetY = 0;
+      let pageIndex = 0;
+      while (offsetY < canvas.height) {
+        const currentH = Math.min(slicePx, canvas.height - offsetY);
+        const slice = document.createElement("canvas");
+        slice.width = canvas.width;
+        slice.height = currentH;
+        const ctx = slice.getContext("2d");
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, slice.width, slice.height);
+        ctx.drawImage(
+          canvas,
+          0, offsetY, canvas.width, currentH,
+          0, 0, slice.width, slice.height
+        );
+
+        const data = slice.toDataURL("image/jpeg", 0.95);
+        const renderedH = currentH * usableW / slice.width;
+        if (pageIndex > 0) pdf.addPage();
+        pdf.addImage(data, "JPEG", margin, margin, usableW, renderedH, undefined, "FAST");
+        offsetY += currentH;
+        pageIndex++;
+      }
+
+      return pdf.output("blob");
+    }
+
+    function triggerBlobDownload(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.rel = "noopener";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+    }
+
+    async function downloadAnalyticsExport() {
+      let target = null;
+      try {
+        const type = getCustomSelectValue("export-report-type", "full");
+        const format = getCustomSelectValue("export-format", "pdf");
+        target = await buildCaptureNode(format);
+        const canvas = await renderExportCanvas(target);
+
+        if (format === "pdf") {
+          const blob = await canvasToPdfBlob(canvas);
+          triggerBlobDownload(blob, getExportFilename(type, "pdf"));
+        } else {
+          const mime = format === "jpg" ? "image/jpeg" : "image/png";
+          const ext = format === "jpg" ? "jpg" : "png";
+          let exportCanvas = canvas;
+          if (format === "jpg") {
+            const opaque = document.createElement("canvas");
+            opaque.width = canvas.width;
+            opaque.height = canvas.height;
+            const ctx = opaque.getContext("2d");
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, opaque.width, opaque.height);
+            ctx.drawImage(canvas, 0, 0);
+            exportCanvas = opaque;
+          }
+          const blob = await new Promise((resolve, reject) => {
+            exportCanvas.toBlob(b => b ? resolve(b) : reject(new Error("Gagal membuat file gambar.")), mime, 0.95);
+          });
+          triggerBlobDownload(blob, getExportFilename(type, ext));
+        }
+
+        toast(currentLanguage()==="en" ? "Export ready." : "Export berhasil dibuat.");
+      } catch(err) {
+        console.error("[GYMFlow Export]", err);
+        toast(err.message || "Export gagal.");
+      } finally {
+        if (target?.isConnected) target.remove();
+      }
+    }
+
+    async function shareAnalyticsExport() {
+      let target = null;
+      try {
+        if (!navigator.share) {
+          toast(currentLanguage()==="en" ? "Share is not supported. Use Download instead." : "Share tidak didukung browser ini. Gunakan Download.");
+          return;
+        }
+
+        const type = getCustomSelectValue("export-report-type", "full");
+        const format = getCustomSelectValue("export-format", "pdf") === "pdf" ? "pdf" : "png";
+        target = await buildCaptureNode(format);
+        const canvas = await renderExportCanvas(target);
+
+        let blob, mime, ext;
+        if (format === "pdf") {
+          blob = await canvasToPdfBlob(canvas);
+          mime = "application/pdf";
+          ext = "pdf";
+        } else {
+          blob = await new Promise((resolve, reject) => {
+            canvas.toBlob(b => b ? resolve(b) : reject(new Error("Gagal membuat file gambar.")), "image/png", 0.95);
+          });
+          mime = "image/png";
+          ext = "png";
+        }
+
+        const file = new File([blob], getExportFilename(type, ext), {type:mime});
+        if (navigator.canShare && navigator.canShare({files:[file]})) {
+          await navigator.share({
+            title:`GYMFlow ${type}`,
+            text:"GYMFlow workout report",
+            files:[file]
+          });
+        } else {
+          toast(currentLanguage()==="en" ? "File sharing is not available on this device." : "Share file tidak tersedia di perangkat ini.");
+        }
+      } catch(err) {
+        console.error("[GYMFlow Share]", err);
+        toast(err.message || "Share gagal.");
+      } finally {
+        if (target?.isConnected) target.remove();
+      }
+    }
+
+
+    /* ===== GYMFlow Photo Workout Export =====
+       1080x1080 canvas-first renderer: the exact same canvas drives preview,
+       download and share, so what the user sees is what gets exported. */
+    function photoExportFormatNumber(n){
+      const v = Number(n) || 0;
+      const sign = v < 0 ? "-" : "";
+      const a = Math.abs(v);
+      if (a >= 1000000) return sign + (a/1000000).toFixed(a >= 10000000 ? 0 : 1).replace(/\.0$/,'') + "m";
+      if (a >= 1000) return sign + (a/1000).toFixed(a >= 100000 ? 0 : 1).replace(/\.0$/,'') + "k";
+      return sign + new Intl.NumberFormat("en-US", {maximumFractionDigits:0}).format(a);
+    }
+
+    function photoExportPeriodTitle(session=null){
+      if (session?.endedAt) {
+        return new Date(session.endedAt).toLocaleDateString("en-US", {month:"long", year:"numeric"});
+      }
+      const now = new Date();
+      const map = {"7d":"LAST 7 DAYS","30d":now.toLocaleDateString("en-US",{month:"long",year:"numeric"}),"90d":"LAST 3 MONTHS","1y":"LAST 12 MONTHS","all":"ALL TIME"};
+      return map[analyticsPeriod] || now.toLocaleDateString("en-US",{month:"long",year:"numeric"});
+    }
+
+    function getPhotoWorkoutData(sessionOverride=null){
+      if (sessionOverride) {
+        const m = calculateSessionMetrics(sessionOverride, (state.history || []).filter(s=>s.id!==sessionOverride.id));
+        return {
+          period: photoExportPeriodTitle(sessionOverride),
+          workouts: 1,
+          duration: Number(sessionOverride.duration)||0,
+          volume: m.totalVolume,
+          sets: m.totalSets,
+          exercises: m.totalExercises,
+          prs: m.personalRecords.length,
+          topMuscle: m.muscleGroups?.[0] ? (ANALYTICS_LABELS[m.muscleGroups[0]] || m.muscleGroups[0]) : "—",
+          muscleGroups: (m.muscleGroups || []).map(k => ANALYTICS_LABELS[k] || k),
+          routineName: routineById(sessionOverride.routineId)?.name || "Workout"
+        };
+      }
+
+      const model = buildAnalyticsModel(analyticsPeriod);
+      return {
+        period: photoExportPeriodTitle(),
+        workouts: model.totalWorkouts,
+        duration: model.totalDuration,
+        volume: model.totalVolume,
+        sets: model.totalSets,
+        exercises: model.totalExercises,
+        prs: model.personalRecords.length,
+        topMuscle: model.topMuscle ? (ANALYTICS_LABELS[model.topMuscle.key] || model.topMuscle.key) : "—",
+        muscleGroups: model.muscleStats.filter(m=>m.sets>0).slice(0,4).map(m => ANALYTICS_LABELS[m.key] || m.key),
+        routineName: ""
+      };
+    }
+
+    function gfCanvasText(ctx, text, x, y, size, weight=800, color="#ffffff", align="left", maxWidth=null){
+      ctx.save();
+      ctx.font = `${weight} ${size}px "DM Sans", Arial, sans-serif`;
+      ctx.textAlign = align;
+      ctx.textBaseline = "alphabetic";
+      ctx.fillStyle = color;
+      ctx.shadowColor = "rgba(0,0,0,.48)";
+      ctx.shadowBlur = 14;
+      ctx.shadowOffsetY = 3;
+      const value = String(text ?? "");
+      if (maxWidth) ctx.fillText(value, x, y, maxWidth);
+      else ctx.fillText(value, x, y);
+      ctx.restore();
+    }
+
+    function gfCanvasLabel(ctx, label, x, y, align="left", scale=1){
+      const labelScale = Math.max(.72, scale || 1);
+      const text = String(label).toUpperCase();
+      ctx.save();
+      ctx.font = `800 ${22*labelScale}px "DM Sans", Arial, sans-serif`;
+      ctx.textAlign = align;
+      ctx.textBaseline = "alphabetic";
+      ctx.fillStyle = "rgba(255,255,255,.84)";
+      ctx.shadowColor = "rgba(0,0,0,.6)";
+      ctx.shadowBlur = 10*labelScale;
+      ctx.fillText(text, x, y);
+      const textWidth = ctx.measureText(text).width;
+      ctx.restore();
+      const w = Math.min(54*labelScale, Math.max(30*labelScale, textWidth * .26));
+      ctx.save();
+      ctx.fillStyle = "#88F914";
+      ctx.fillRect(align === "right" ? x - w : x, y + 12*labelScale, w, 4*labelScale);
+      ctx.restore();
+    }
+
+    function gfCanvasMetric(ctx, x, y, label, value, side="left", valueSize=62){
+      const align = side === "right" ? "right" : "left";
+      gfCanvasLabel(ctx, label, x, y, align);
+      gfCanvasText(ctx, value, x, y + 72, valueSize, 900, "#ffffff", align, 470);
+    }
+
+    function gfCanvasBrand(ctx, x, y, username, logoImage=null, scale=1){
+      const mark = 38*scale;
+      if (logoImage?.complete && logoImage.naturalWidth) {
+        ctx.save();
+        ctx.drawImage(logoImage,x,y-mark*.86,mark,mark);
+        ctx.restore();
+      } else {
+        ctx.save();
+        ctx.fillStyle = "#88F914";
+        ctx.fillRect(x,y-mark*.74,32*scale,32*scale);
+        ctx.fillStyle = "#0a0f0b";
+        ctx.font = `900 ${20*scale}px Arial, sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("G",x+16*scale,y-mark*.38);
+        ctx.restore();
+      }
+      gfCanvasText(ctx,"GYMFlow",x+48*scale,y-4*scale,25*scale,900,"#ffffff","left");
+      gfCanvasText(ctx,username ? `@${username.replace(/^@+/,"")}` : "@gymflow",x+48*scale,y+24*scale,18*scale,700,"rgba(255,255,255,.72)","left");
+    }
+
+    function getPhotoExportFullscreenSize(){
+      const vv = window.visualViewport;
+      const viewportW = Number(vv?.width || window.innerWidth || 16);
+      const viewportH = Number(vv?.height || window.innerHeight || 9);
+      const ratio = Math.max(0.35, Math.min(3.2, viewportW / Math.max(1, viewportH)));
+      const longEdge = 1920;
+      let width, height;
+      if (ratio >= 1) {
+        width = longEdge;
+        height = Math.max(540, Math.round(longEdge / ratio));
+      } else {
+        height = longEdge;
+        width = Math.max(540, Math.round(longEdge * ratio));
+      }
+      return {width, height};
+    }
+
+    function getPhotoExportSize(){
+      const editor = window.__gfPhotoExportEditor;
+      if (!editor) return {width:1920,height:1080};
+      if (editor.sizeMode === "custom") return {width:editor.width,height:editor.height};
+      return getPhotoExportFullscreenSize();
+    }
+
+    function clampPhotoDimension(v, fallback=1080){
+      return Math.max(320, Math.min(8192, Math.round(Number(v) || fallback)));
+    }
+
+    function photoExportAspectRatio(width,height){
+      const w = Math.max(1, Math.round(Number(width)||1));
+      const h = Math.max(1, Math.round(Number(height)||1));
+      const gcd = (a,b) => b ? gcd(b, a % b) : a;
+      const g = gcd(w,h);
+      return `${Math.round(w/g)}:${Math.round(h/g)}`;
+    }
+
+    function syncPhotoExportSizeFromInputs(preset=null){
+      const editor = window.__gfPhotoExportEditor;
+      if (!editor) return;
+      const presets = {square:[1080,1080],portrait:[1080,1350],story:[1080,1920],landscape:[1920,1080]};
+      if (preset && presets[preset]) {
+        [editor.width, editor.height] = presets[preset];
+        editor.preset = preset;
+      } else {
+        editor.width = clampPhotoDimension(document.getElementById("gf-photo-export-width")?.value, editor.width || 1080);
+        editor.height = clampPhotoDimension(document.getElementById("gf-photo-export-height")?.value, editor.height || 1080);
+        editor.preset = "custom";
+      }
+      updatePhotoWorkoutControls();
+    }
+
+    function setPhotoExportSizeMode(mode){
+      const editor = window.__gfPhotoExportEditor;
+      if (!editor) return;
+      if (mode === "custom" && editor.sizeMode !== "custom") {
+        editor.width = 1080;
+        editor.height = 1080;
+        editor.preset = "square";
+      }
+      editor.sizeMode = mode === "custom" ? "custom" : "fullscreen";
+      updatePhotoWorkoutControls();
+    }
+
+    function getPhotoCanvasLayout(W,H){
+      const s = Math.min(W,H) / 1080;
+      return {s,left:W*.0666667,right:W*.9333333,headerY:H*.0759,titleY:H*.1185,row1:H*.255,row2:H*.47,row3:H*.68,row4:H*.83,footerY:H*.931};
+    }
+
+    function gfCanvasMetricResponsive(ctx, layout, x, y, label, value, side="left", valueSize=62, maxWidth=null){
+      const align = side === "right" ? "right" : "left";
+      gfCanvasLabel(ctx,label,x,y,align,layout.s);
+      gfCanvasText(ctx,value,x,y+72*layout.s,valueSize*layout.s,900,"#ffffff",align,maxWidth || .43*Math.max(x,1));
+    }
+
+    function drawPhotoWorkoutCanvas(){
+      const editor = window.__gfPhotoExportEditor;
+      const canvas = document.getElementById("gf-photo-export-canvas");
+      if (!editor || !canvas) return;
+      const {width:W,height:H} = getPhotoExportSize();
+      if (canvas.width !== W) canvas.width=W;
+      if (canvas.height !== H) canvas.height=H;
+      canvas.style.aspectRatio=`${W}/${H}`;
+      canvas.setAttribute("aria-label",`Preview workout export ${W} by ${H}`);
+      const ctx=canvas.getContext("2d",{alpha:true});
+      if(!ctx) return;
+      ctx.clearRect(0,0,W,H);
+      const transparent=editor.format==="png"&&editor.transparent;
+      if(!transparent){
+        if(editor.image){
+          const img=editor.image;
+          const fitScale=Math.max(W/img.naturalWidth,H/img.naturalHeight);
+          const scale=fitScale*editor.zoom;
+          const drawW=img.naturalWidth*scale, drawH=img.naturalHeight*scale;
+          ctx.save();
+          ctx.translate(W/2+editor.offsetX*W,H/2+editor.offsetY*H);
+          ctx.drawImage(img,-drawW/2,-drawH/2,drawW,drawH);
+          ctx.restore();
+        }else{ctx.fillStyle="#090d13";ctx.fillRect(0,0,W,H);}
+        const leftFade=ctx.createLinearGradient(0,0,W*.76,0);leftFade.addColorStop(0,"rgba(0,0,0,.76)");leftFade.addColorStop(.42,"rgba(0,0,0,.31)");leftFade.addColorStop(1,"rgba(0,0,0,0)");ctx.fillStyle=leftFade;ctx.fillRect(0,0,W,H);
+        const bottomFade=ctx.createLinearGradient(0,H*.58,0,H);bottomFade.addColorStop(0,"rgba(0,0,0,0)");bottomFade.addColorStop(1,"rgba(0,0,0,.78)");ctx.fillStyle=bottomFade;ctx.fillRect(0,H*.48,W,H*.52);
+        const vignette=ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*.34,W/2,H/2,Math.min(W,H)*.72);vignette.addColorStop(0,"rgba(0,0,0,0)");vignette.addColorStop(1,"rgba(0,0,0,.34)");ctx.fillStyle=vignette;ctx.fillRect(0,0,W,H);
+      }
+      const data=getPhotoWorkoutData(editor.sessionOverride), username=state.settings.userName||"GYMFlow User", template=editor.template, layout=getPhotoCanvasLayout(W,H), s=layout.s;
+      const tallCanvas = H / Math.max(1,W) > 1.15;
+      const compactUnit = Math.min(W,H);
+      const compactRows = tallCanvas ? {
+        row1: compactUnit * .30,
+        row2: compactUnit * .52,
+        row3: compactUnit * .70,
+        row4: compactUnit * .84
+      } : {
+        row1: layout.row1,
+        row2: layout.row2,
+        row3: layout.row3,
+        row4: layout.row4
+      };
+      gfCanvasText(ctx,data.period,layout.left,layout.headerY,Math.max(18,27*s),600,"rgba(255,255,255,.78)","left");
+      gfCanvasText(ctx,template==="performance"?"PERFORMANCE":"WORKOUTS",layout.left,layout.titleY,Math.max(13,18*s),900,"#88F914","left");
+      gfCanvasText(ctx,`@${username.replace(/^@+/,"")}`,layout.right,layout.headerY,Math.max(14,19*s),700,"rgba(255,255,255,.82)","right");
+      if(template==="minimal"){
+        gfCanvasLabel(ctx,"WORKOUTS",layout.left,layout.row1,"left",s);gfCanvasText(ctx,String(data.workouts),layout.left,layout.row1+170*s,188*s,900,"#ffffff","left");
+        gfCanvasLabel(ctx,"TOTAL DURATION",layout.left,layout.row2-20*s,"left",s);gfCanvasText(ctx,formatTimeDetailed(data.duration),layout.left,layout.row2+52*s,54*s,850,"#ffffff","left");
+        gfCanvasLabel(ctx,"VOLUME",layout.left,layout.row3-30*s,"left",s);gfCanvasText(ctx,photoExportFormatNumber(data.volume)+" kg",layout.left,layout.row3+42*s,60*s,900,"#ffffff","left");
+        gfCanvasMetricResponsive(ctx,layout,layout.right,layout.row3-30*s,"SETS",String(data.sets),"right",60,.3*W);gfCanvasMetricResponsive(ctx,layout,layout.right,layout.row4-35*s,"PRs",String(data.prs),"right",54,.3*W);
+      }else if(template==="performance"){
+        const perfRow1 = compactRows.row1, perfRow2 = compactRows.row2, perfRow3 = compactRows.row3, perfRow4 = compactRows.row4;
+        gfCanvasLabel(ctx,"VOLUME",layout.left,perfRow1,"left",s);gfCanvasText(ctx,photoExportFormatNumber(data.volume)+" kg",layout.left,perfRow1+130*s,118*s,900,"#ffffff","left",.7*W);gfCanvasText(ctx,"TOTAL TRAINING LOAD",layout.left,perfRow1+172*s,18*s,800,"rgba(255,255,255,.70)","left");
+        gfCanvasMetricResponsive(ctx,layout,layout.left,perfRow2-10*s,"DURATION",formatTimeDetailed(data.duration),"left",60,.38*W);gfCanvasMetricResponsive(ctx,layout,layout.right,perfRow2-10*s,"SETS",String(data.sets),"right",60,.3*W);
+        gfCanvasMetricResponsive(ctx,layout,layout.left,perfRow3-10*s,"PERSONAL RECORDS",String(data.prs),"left",60,.4*W);gfCanvasMetricResponsive(ctx,layout,layout.right,perfRow3-10*s,"EXERCISES",String(data.exercises),"right",60,.3*W);
+        if(data.topMuscle&&data.topMuscle!=="—")gfCanvasText(ctx,`TOP MUSCLE · ${data.topMuscle.toUpperCase()}`,layout.left,perfRow4,20*s,800,"#88F914","left",.8*W);
+      }else if(template==="full"){
+        const fullRow1 = compactRows.row1, fullRow2 = compactRows.row2, fullRow3 = compactRows.row3, fullRow4 = compactRows.row4;
+        gfCanvasLabel(ctx,"WORKOUTS",layout.left,fullRow1,"left",s);gfCanvasText(ctx,String(data.workouts),layout.left,fullRow1+72*s,86*s,900,"#ffffff","left");
+        gfCanvasLabel(ctx,"DURATION",W*.53,fullRow1,"left",s);gfCanvasText(ctx,formatTimeDetailed(data.duration),W*.53,fullRow1+72*s,72*s,900,"#ffffff","left",.4*W);
+        gfCanvasLabel(ctx,"VOLUME",layout.left,fullRow2,"left",s);gfCanvasText(ctx,photoExportFormatNumber(data.volume)+" kg",layout.left,fullRow2+72*s,74*s,900,"#ffffff","left",.43*W);
+        gfCanvasLabel(ctx,"SETS",W*.53,fullRow2,"left",s);gfCanvasText(ctx,String(data.sets),W*.53,fullRow2+72*s,74*s,900,"#ffffff","left");
+        gfCanvasLabel(ctx,"EXERCISES",layout.left,fullRow3,"left",s);gfCanvasText(ctx,String(data.exercises),layout.left,fullRow3+68*s,66*s,900,"#ffffff","left");
+        gfCanvasLabel(ctx,"PERSONAL RECORDS",W*.53,fullRow3,"left",s);gfCanvasText(ctx,String(data.prs),W*.53,fullRow3+68*s,66*s,900,"#ffffff","left");
+        if(data.topMuscle&&data.topMuscle!=="—")gfCanvasText(ctx,`TOP MUSCLE · ${data.topMuscle.toUpperCase()}`,layout.left,fullRow4,20*s,800,"#88F914","left",.8*W);
+        if(data.muscleGroups?.length)gfCanvasText(ctx,data.muscleGroups.join("  ·  ").toUpperCase(),layout.left,fullRow4+34*s,19*s,700,"rgba(255,255,255,.72)","left",.86*W);
+      }else{
+        // CLASSIC — match the reference: clean 2×2 stat grid, large values,
+        // generous spacing, and no extra dashboard-style stat blocks.
+        // CLASSIC uses a compact reference-style 2-column grid.
+        // Horizontal positions follow the reference composition (~18% / ~53%),
+        // while vertical spacing is capped from canvas height so tall fullscreen
+        // exports do not stretch the stats apart.
+        const statScale = Math.min(1.18, Math.max(.72, layout.s));
+        const statLeft = W * .177;
+        const statRight = W * .529;
+        // Keep the 2×2 block compact on tall/fullscreen canvases. Its vertical
+        // rhythm follows the short edge (same visual density as the reference),
+        // instead of expanding with the full portrait height.
+        const classicRow1 = compactRows.row1;
+        const classicRow2 = compactRows.row2;
+
+        function drawClassicReferenceStat(label, value, x, y, align="left", valueSize=72){
+          ctx.save();
+          ctx.font = `600 ${Math.max(16, 21*statScale)}px "DM Sans", Arial, sans-serif`;
+          ctx.textAlign = align;
+          ctx.textBaseline = "alphabetic";
+          ctx.fillStyle = "rgba(255,255,255,.88)";
+          ctx.shadowColor = "rgba(0,0,0,.58)";
+          ctx.shadowBlur = 9*statScale;
+          ctx.shadowOffsetY = 2;
+          ctx.fillText(label, x, y);
+          ctx.restore();
+
+          gfCanvasText(
+            ctx,
+            value,
+            x,
+            y + 63*statScale,
+            Math.max(42, valueSize*statScale),
+            900,
+            "#ffffff",
+            align,
+            .43*W
+          );
+        }
+
+        drawClassicReferenceStat("Workouts", String(data.workouts), statLeft, classicRow1, "left", 76);
+        drawClassicReferenceStat("Duration", formatTimeDetailed(data.duration), statRight, classicRow1, "left", 61);
+        drawClassicReferenceStat("Volume", photoExportFormatNumber(data.volume)+" kg", statLeft, classicRow2, "left", 63);
+        drawClassicReferenceStat("Sets", String(data.sets), statRight, classicRow2, "left", 63);
+      }
+      gfCanvasBrand(ctx,layout.left,layout.footerY,username,editor.logoImage,s);gfCanvasText(ctx,"YOUR FITNESS JOURNEY",layout.right,layout.footerY+8*s,15*s,800,"rgba(255,255,255,.55)","right",.35*W);
+    }
+
+    function updatePhotoWorkoutControls(){
+      const editor=window.__gfPhotoExportEditor;if(!editor)return;
+      const {width,height}=getPhotoExportSize();
+      document.querySelectorAll(".gf-photo-template").forEach(btn=>btn.classList.toggle("active",btn.dataset.template===editor.template));
+      document.querySelectorAll(".gf-photo-format").forEach(btn=>btn.classList.toggle("active",btn.dataset.format===editor.format));
+      document.querySelectorAll(".gf-photo-size-mode").forEach(btn=>btn.classList.toggle("active",btn.dataset.sizeMode===editor.sizeMode));
+      document.querySelectorAll(".gf-photo-preset").forEach(btn=>btn.classList.toggle("active",editor.sizeMode==="custom"&&btn.dataset.preset===editor.preset));
+      document.getElementById("gf-photo-custom-size-panel")?.classList.toggle("hidden",editor.sizeMode!=="custom");
+      const helper=document.getElementById("gf-photo-size-helper");if(helper)helper.textContent=editor.sizeMode==="fullscreen"?"auto device aspect":"custom canvas";
+      const wi=document.getElementById("gf-photo-export-width"),hi=document.getElementById("gf-photo-export-height");if(wi)wi.value=String(editor.width);if(hi)hi.value=String(editor.height);
+      const ratio=document.getElementById("gf-photo-export-ratio");if(ratio)ratio.textContent=photoExportAspectRatio(width,height);
+      const transparent=document.getElementById("gf-photo-export-transparent");if(transparent){transparent.disabled=editor.format!=="png";transparent.closest("label")?.classList.toggle("is-disabled",editor.format!=="png");transparent.checked=editor.transparent;}
+      const zoom=document.getElementById("gf-photo-export-zoom"),zoomLabel=document.getElementById("gf-photo-export-zoom-label");if(zoom)zoom.value=String(editor.zoom);if(zoomLabel)zoomLabel.textContent=`Zoom ${Math.round(editor.zoom*100)}%`;
+      const subtitle=document.getElementById("gf-photo-export-subtitle");if(subtitle)subtitle.textContent=`${editor.sizeMode==="fullscreen"?"Fullscreen":`${width}×${height}`} · data dari GYMFlow`;
+      const stageMeta=document.getElementById("gf-photo-export-size-meta");if(stageMeta)stageMeta.textContent=editor.sizeMode==="fullscreen"?`Fullscreen · ${width} × ${height} px`:`${width} × ${height} px`;
+      const meta=document.getElementById("gf-photo-export-live-meta");if(meta)meta.textContent=`${editor.template==="classic"?"Classic":editor.template==="minimal"?"Minimal":editor.template==="performance"?"Performance":"Full Stats"} · ${editor.format.toUpperCase()}${editor.format==="png"&&editor.transparent?" · Transparent":""}`;
+      const fh=document.getElementById("gf-photo-format-helper");if(fh)fh.textContent=editor.format==="png"?"PNG with alpha":"JPG photo background";
+      document.getElementById("gf-photo-export-preview")?.classList.toggle("is-transparent",editor.format==="png"&&editor.transparent);
+      document.getElementById("gf-photo-export-empty")?.classList.toggle("hidden",!!editor.image);
+      document.querySelectorAll("#gf-photo-export-download,#gf-photo-export-share").forEach(btn=>btn.disabled=!editor.image);
+      drawPhotoWorkoutCanvas();
+    }
+
+    function loadPhotoWorkoutImage(file){
+      if (!file) return;
+      if (!file.type.startsWith("image/")) {
+        toast(currentLanguage()==="en" ? "Please choose an image file." : "Pilih file gambar.");
+        return;
+      }
+      const editor = window.__gfPhotoExportEditor;
+      if (!editor) return;
+      if (editor.objectUrl) URL.revokeObjectURL(editor.objectUrl);
+      const objectUrl = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        editor.image = img;
+        editor.objectUrl = objectUrl;
+        editor.offsetX = 0;
+        editor.offsetY = 0;
+        editor.zoom = 1;
+        updatePhotoWorkoutControls();
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        toast(currentLanguage()==="en" ? "Image could not be loaded." : "Foto tidak bisa dimuat.");
+      };
+      img.src = objectUrl;
+    }
+
+    function setPhotoWorkoutZoom(next){
+      const editor = window.__gfPhotoExportEditor;
+      if (!editor) return;
+      editor.zoom = Math.min(2.2, Math.max(1, Number(next)||1));
+      updatePhotoWorkoutControls();
+    }
+
+    function initPhotoWorkoutExport(){
+      if (window.__gfPhotoExportEditor) return;
+      // Photo Workout Export opens with the compact 1080×1080 square preset by default.
+      // Fullscreen remains available as an explicit user choice.
+      window.__gfPhotoExportEditor = {
+        template:"classic",
+        format:"jpg",
+        transparent:false,
+        zoom:1,
+        offsetX:0,
+        offsetY:0,
+        image:null,
+        objectUrl:null,
+        sessionOverride:null,
+        logoImage:null,
+        dragging:false,
+        lastPointer:null,
+        sizeMode:"custom",
+        width:1080,
+        height:1080,
+        preset:"square"
       };
 
-      setTimeout(() => {
-        html2pdf().from(wrapper.firstElementChild).set(opt).save().then(() => {
-          wrapper.remove();
-          toast("PDF berhasil didownload!");
-        }).catch(err => {
-          wrapper.remove();
-          toast("Gagal mendownload PDF.");
-          console.error(err);
+      const logo = new Image();
+      logo.onload = () => { window.__gfPhotoExportEditor.logoImage = logo; drawPhotoWorkoutCanvas(); };
+      logo.src = "new_logoprofile.png";
+
+      const file = document.getElementById("gf-photo-export-file");
+      const upload = document.getElementById("gf-photo-export-upload");
+      const emptyUpload = document.getElementById("gf-photo-export-empty-upload");
+      upload?.addEventListener("click",()=>file?.click());
+      emptyUpload?.addEventListener("click",()=>file?.click());
+      file?.addEventListener("change",e=>loadPhotoWorkoutImage(e.target.files?.[0]));
+
+      document.querySelectorAll(".gf-photo-template").forEach(btn=>btn.addEventListener("click",()=>{
+        window.__gfPhotoExportEditor.template = btn.dataset.template || "classic";
+        updatePhotoWorkoutControls();
+      }));
+      document.querySelectorAll(".gf-photo-format").forEach(btn=>btn.addEventListener("click",()=>{
+        const editor = window.__gfPhotoExportEditor;
+        editor.format = btn.dataset.format || "jpg";
+        if (editor.format !== "png") editor.transparent = false;
+        updatePhotoWorkoutControls();
+      }));
+      document.querySelectorAll(".gf-photo-size-mode").forEach(btn=>btn.addEventListener("click",()=>setPhotoExportSizeMode(btn.dataset.sizeMode)));
+      document.querySelectorAll(".gf-photo-preset").forEach(btn=>btn.addEventListener("click",()=>{
+        const preset=btn.dataset.preset||"square";
+        if(preset==="custom"){
+          const editor=window.__gfPhotoExportEditor;editor.sizeMode="custom";editor.preset="custom";updatePhotoWorkoutControls();document.getElementById("gf-photo-export-width")?.focus();document.getElementById("gf-photo-export-width")?.select?.();return;
+        }
+        setPhotoExportSizeMode("custom");
+        syncPhotoExportSizeFromInputs(preset);
+      }));
+      ["gf-photo-export-width","gf-photo-export-height"].forEach(id=>document.getElementById(id)?.addEventListener("input",()=>{const editor=window.__gfPhotoExportEditor;editor.sizeMode="custom";syncPhotoExportSizeFromInputs();}));
+      document.getElementById("gf-photo-export-transparent")?.addEventListener("change",e=>{
+        const editor = window.__gfPhotoExportEditor;
+        editor.transparent = !!e.target.checked;
+        updatePhotoWorkoutControls();
+      });
+      document.getElementById("gf-photo-export-reset")?.addEventListener("click",()=>{
+        const editor = window.__gfPhotoExportEditor;
+        editor.offsetX=0; editor.offsetY=0; editor.zoom=1;
+        updatePhotoWorkoutControls();
+      });
+      document.getElementById("gf-photo-export-zoom")?.addEventListener("input",e=>setPhotoWorkoutZoom(e.target.value));
+      document.getElementById("gf-photo-export-zoom-out")?.addEventListener("click",()=>setPhotoWorkoutZoom((window.__gfPhotoExportEditor?.zoom||1)-.05));
+      document.getElementById("gf-photo-export-zoom-in")?.addEventListener("click",()=>setPhotoWorkoutZoom((window.__gfPhotoExportEditor?.zoom||1)+.05));
+
+      const canvas = document.getElementById("gf-photo-export-canvas");
+      if (canvas) {
+        const pointerPos = (ev) => {
+          const r = canvas.getBoundingClientRect();
+          return {x:(ev.clientX-r.left)/Math.max(1,r.width), y:(ev.clientY-r.top)/Math.max(1,r.height)};
+        };
+        canvas.addEventListener("pointerdown",ev=>{
+          const editor=window.__gfPhotoExportEditor;
+          if (!editor.image) return;
+          editor.dragging=true;
+          editor.lastPointer=pointerPos(ev);
+          canvas.setPointerCapture?.(ev.pointerId);
         });
-      }, 100);
+        canvas.addEventListener("pointermove",ev=>{
+          const editor=window.__gfPhotoExportEditor;
+          if (!editor.dragging || !editor.lastPointer) return;
+          const p=pointerPos(ev);
+          editor.offsetX += p.x-editor.lastPointer.x;
+          editor.offsetY += p.y-editor.lastPointer.y;
+          editor.lastPointer=p;
+          drawPhotoWorkoutCanvas();
+        });
+        const stop=ev=>{
+          const editor=window.__gfPhotoExportEditor;
+          editor.dragging=false;
+          editor.lastPointer=null;
+          try{canvas.releasePointerCapture?.(ev.pointerId);}catch(_){ }
+        };
+        canvas.addEventListener("pointerup",stop);
+        canvas.addEventListener("pointercancel",stop);
+        canvas.addEventListener("dblclick",()=>{
+          const editor=window.__gfPhotoExportEditor;
+          editor.offsetX=0; editor.offsetY=0;
+          editor.zoom=1;
+          updatePhotoWorkoutControls();
+        });
+      }
+
+      const onFullscreenResize=()=>{
+        const editor=window.__gfPhotoExportEditor;if(!editor||editor.sizeMode!=="fullscreen")return;
+        const next=getPhotoExportFullscreenSize();
+        if(editor.width!==next.width||editor.height!==next.height){editor.width=next.width;editor.height=next.height;updatePhotoWorkoutControls();}
+      };
+      window.addEventListener("resize",onFullscreenResize,{passive:true});
+      window.visualViewport?.addEventListener?.("resize",onFullscreenResize,{passive:true});
+
+      document.getElementById("gf-photo-export-download")?.addEventListener("click",downloadPhotoWorkoutExport);
+      document.getElementById("gf-photo-export-share")?.addEventListener("click",sharePhotoWorkoutExport);
+      updatePhotoWorkoutControls();
+    }
+
+    function openPhotoWorkoutExportModal(sessionOverride=null){
+      ensureAnalyticsModals();
+      const editor = window.__gfPhotoExportEditor;
+      if (!editor) return;
+      editor.sessionOverride = sessionOverride || null;
+      updatePhotoWorkoutControls();
+      openModal("photo-workout-export-modal");
+      requestAnimationFrame(()=>drawPhotoWorkoutCanvas());
+    }
+
+    function getPhotoWorkoutFilename(ext){
+      const date = new Date().toISOString().slice(0,10);
+      const editor = window.__gfPhotoExportEditor;
+      const {width,height} = getPhotoExportSize();
+      const suffix = editor?.sizeMode === "fullscreen" ? `fullscreen-${width}x${height}` : `${width}x${height}`;
+      return `GYMFlow-Workout-${date}-${suffix}.${ext}`;
+    }
+
+    function getPhotoWorkoutCanvasBlob(canvas, format){
+      const mime = format === "jpg" ? "image/jpeg" : "image/png";
+      return new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(new Error("Gagal membuat file gambar.")),mime,0.96));
+    }
+
+    async function downloadPhotoWorkoutExport(){
+      const editor = window.__gfPhotoExportEditor;
+      const canvas = document.getElementById("gf-photo-export-canvas");
+      if (!editor?.image || !canvas) {
+        toast(currentLanguage()==="en" ? "Upload a photo first." : "Upload foto terlebih dahulu.");
+        return;
+      }
+      try {
+        drawPhotoWorkoutCanvas();
+        const blob = await getPhotoWorkoutCanvasBlob(canvas,editor.format);
+        triggerBlobDownload(blob,getPhotoWorkoutFilename(editor.format));
+        toast(currentLanguage()==="en" ? "Workout photo exported." : "Workout photo berhasil diexport.");
+      } catch(err) {
+        console.error("[GYMFlow Photo Export]",err);
+        toast(err.message || "Export gagal.");
+      }
+    }
+
+    async function sharePhotoWorkoutExport(){
+      const editor = window.__gfPhotoExportEditor;
+      const canvas = document.getElementById("gf-photo-export-canvas");
+      if (!editor?.image || !canvas) {
+        toast(currentLanguage()==="en" ? "Upload a photo first." : "Upload foto terlebih dahulu.");
+        return;
+      }
+      try {
+        if (!navigator.share) {
+          await downloadPhotoWorkoutExport();
+          return;
+        }
+        drawPhotoWorkoutCanvas();
+        const blob = await getPhotoWorkoutCanvasBlob(canvas,editor.format);
+        const ext = editor.format;
+        const mime = editor.format === "jpg" ? "image/jpeg" : "image/png";
+        const file = new File([blob],getPhotoWorkoutFilename(ext),{type:mime});
+        if (navigator.canShare && navigator.canShare({files:[file]})) {
+          await navigator.share({title:"GYMFlow Workout",text:"My GYMFlow workout",files:[file]});
+        } else {
+          await downloadPhotoWorkoutExport();
+        }
+      } catch(err) {
+        if (err?.name === "AbortError") return;
+        console.error("[GYMFlow Photo Share]",err);
+        toast(err.message || "Share gagal.");
+      }
+    }
+
+    function exportPDF() {
+      if (state.history.length === 0) {
+        toast(currentLanguage()==="en" ? "No workout history available to export." : "Belum ada data history latihan untuk didownload.");
+        return;
+      }
+      openExportModal("daily");
     }
 
     state=loadState();
@@ -1588,6 +3458,10 @@ const KEY = "gymflow-v3";
       }, 2500);
 
       populateSelects();
+
+      // Inisialisasi modal/export lebih awal supaya tombol Export di tab Statistics
+      // langsung punya event handler, tanpa harus klik Export di header terlebih dahulu.
+      ensureAnalyticsModals();
       
       initCustomSelect("custom-muscle-filter", () => renderExercises());
       initCustomSelect("custom-exercise-muscle-select", (val) => {
@@ -1637,7 +3511,13 @@ const KEY = "gymflow-v3";
 
       document.getElementById("desktop-reset").onclick = triggerReset;
       document.getElementById("open-profile-btn").onclick = openProfileModalCustom;
-      document.getElementById("export-pdf-daily").onclick = () => exportPDF();
+      document.getElementById("export-pdf-daily").onclick = () => openExportModal("full");
+      initCustomSelect("statistics-period-select", (val) => {
+        analyticsPeriod = val;
+        syncStatisticsPeriodSelect();
+        renderStatisticsAnalytics();
+      });
+      syncStatisticsPeriodSelect();
 
       document.querySelectorAll(".target-pill").forEach(pill => {
         pill.onclick = (e) => {
@@ -1898,3 +3778,83 @@ const KEY = "gymflow-v3";
         toast(currentLanguage()==="en" ? "Routine saved successfully!" : "Routine berhasil disimpan!");
       };
     });
+
+
+/* ==================== PHASE 4 MOTION HELPERS ==================== */
+function gfAnimateNumber(el, targetText, duration=520){
+  if(!el) return;
+  const raw=String(targetText ?? "");
+  const match=raw.match(/^\s*([\d.,]+)(.*)$/);
+  if(!match){el.textContent=raw;return;}
+  const numberText=match[1];
+  const suffix=match[2]||"";
+  const normalized=numberText.replace(/\./g, "").replace(/,/g, ".");
+  const target=Number(normalized);
+  if(!Number.isFinite(target)){el.textContent=raw;return;}
+  const hasDecimal=numberText.includes(",") || (/\.\d+/.test(normalized));
+  const decimals=hasDecimal ? Math.min(1,(numberText.split(/[.,]/)[1]||"").length) : 0;
+  const start=performance.now();
+  const formatter = value => {
+    if(decimals>0){
+      const fixed=value.toFixed(decimals).replace(".",",");
+      return fixed.replace(/\B(?=(\d{3})+(?!\d))/g,".");
+    }
+    return Math.round(value).toLocaleString("id-ID");
+  };
+  function tick(now){
+    const p=Math.min(1,(now-start)/duration);
+    const eased=1-Math.pow(1-p,3);
+    el.textContent=formatter(target*eased)+suffix;
+    if(p<1) requestAnimationFrame(tick); else el.textContent=raw;
+  }
+  el.textContent=formatter(0)+suffix;
+  requestAnimationFrame(tick);
+}
+
+function gfRunProgressMotion(root=document){
+  const selectors=[
+    "#history-session-count",
+    "#progress-this-week",
+    "#progress-current-streak",
+    "#history-calories",
+    "#history-total-time",
+    "#history-avg-duration",
+    "#stat-total-workouts",
+    "#stat-total-sets",
+    "#stat-total-volume",
+    "#stat-pr-count"
+  ];
+  selectors.forEach(sel=>{
+    const el=root.querySelector(sel);
+    if(!el || el.dataset.gfMotionDone==="1") return;
+    const observer=new MutationObserver(()=>{
+      const latest=el.textContent.trim();
+      if(!latest) return;
+      el.dataset.gfMotionDone="1";
+      gfAnimateNumber(el,latest);
+      observer.disconnect();
+    });
+    observer.observe(el,{childList:true,characterData:true,subtree:true});
+    if(el.textContent.trim()){
+      const latest=el.textContent.trim();
+      el.dataset.gfMotionDone="1";
+      gfAnimateNumber(el,latest);
+      observer.disconnect();
+    }
+  });
+}
+
+function gfRefreshProgressMotion(){
+  const history=document.getElementById("history");
+  if(!history) return;
+  history.classList.remove("gf-motion-reset");
+  void history.offsetWidth;
+  history.classList.add("gf-motion-reset");
+  gfRunProgressMotion(history);
+}
+
+document.addEventListener("DOMContentLoaded",()=>{
+  setTimeout(()=>{
+    if(typeof gfRefreshProgressMotion === "function") gfRefreshProgressMotion();
+  },120);
+});
