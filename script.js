@@ -652,40 +652,43 @@ const KEY = "gymflow-v3";
     // --- ROUTINE BUILDER DENGAN PENYESUAIAN CARDIO (MENIT & KM) ---
     function openRoutineBuilder(routineId = null) {
       const isEdit = routineId !== null;
+      const dayPicker = document.getElementById("day-picker");
+      const routine = isEdit ? routineById(routineId) : null;
+
       document.getElementById("routine-modal-title").textContent = isEdit ? "Edit Routine" : "Routine Builder";
       document.getElementById("routine-id").value = routineId || "";
-      
       selectedRoutineExercises = [];
-      
-      if (isEdit) {
-        const routine = routineById(routineId);
-        if (routine) {
-          document.getElementById("routine-name").value = routine.name;
-          document.getElementById("routine-description").value = routine.description || "";
-          
-          selectedRoutineExercises = (routine.exercises || routine.exerciseIds.map(id => ({
-            id: id,
-            sets: [{ reps: 10, weight: 0 }, { reps: 10, weight: 0 }, { reps: 10, weight: 0 }]
-          }))).map(item => {
-            const ex = exerciseById(item.id || item);
-            const isCardio = ex && ex.muscle === "Cardio";
-            return {
-              id: item.id || item,
-              sets: item.sets && item.sets.length > 0 ? [...item.sets] : (isCardio ? [{ reps: 15, weight: 2 }] : [{ reps: 10, weight: 0 }])
-            };
-          });
 
-          document.querySelectorAll("#day-picker .day-chip").forEach(chip => {
-            chip.classList.toggle("active", routine.days.includes(chip.dataset.day));
-          });
-        }
+      // Always render all seven workout-day chips first.
+      // This fixes Edit Routine so previously saved days are available immediately.
+      dayPicker.innerHTML = days.map(d => `<button type="button" class="chip day-chip" data-day="${d}">${d}</button>`).join("");
+
+      if (routine) {
+        document.getElementById("routine-name").value = routine.name || "";
+        document.getElementById("routine-description").value = routine.description || "";
+
+        selectedRoutineExercises = (routine.exercises || (routine.exerciseIds || []).map(id => ({
+          id: id,
+          sets: [{ reps: 10, weight: 0 }, { reps: 10, weight: 0 }, { reps: 10, weight: 0 }]
+        }))).map(item => {
+          const ex = exerciseById(item.id || item);
+          const isCardio = ex && ex.muscle === "Cardio";
+          return {
+            id: item.id || item,
+            sets: item.sets && item.sets.length > 0 ? [...item.sets] : (isCardio ? [{ reps: 15, weight: 2 }] : [{ reps: 10, weight: 0 }])
+          };
+        });
+
+        const savedDays = Array.isArray(routine.days) ? routine.days : [];
+        dayPicker.querySelectorAll(".day-chip").forEach(chip => {
+          chip.classList.toggle("active", savedDays.includes(chip.dataset.day));
+        });
       } else {
         document.getElementById("routine-name").value = "";
         document.getElementById("routine-description").value = "";
-        document.querySelectorAll("#day-picker .day-chip").forEach(chip => chip.classList.remove("active"));
-        document.getElementById("day-picker").innerHTML = days.map(d => `<button type="button" class="chip day-chip" data-day="${d}">${d}</button>`).join("");
+        dayPicker.querySelectorAll(".day-chip").forEach(chip => chip.classList.remove("active"));
       }
-      
+
       renderBuilderSelectedExercises();
       renderBuilderLibrary();
       openModal("routine-modal");
