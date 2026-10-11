@@ -4720,3 +4720,40 @@ body[data-theme="original-green"] #routines .gf-routine-days span {
   background-color: var(--surface) !important;
   border-color: var(--line) !important;
 }
+
+
+/* =====================================================================
+   GitHub Pages/mobile layout safeguard (2026-10-11)
+   Keep the new dashboard markup usable even when older utility styles are
+   still cached. Cache-busting is also applied to style.css in index.html.
+   ===================================================================== */
+#dashboard .gf-dashboard-summary-grid {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
+}
+#dashboard .gf-dashboard-week-days {
+  display: grid !important;
+  grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
+  align-items: start;
+  width: 100%;
+  min-width: 0;
+}
+#dashboard .gf-dashboard-week-days > .gf-week-day {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+}
+#dashboard .gf-dashboard-week-days .gf-week-day-line {
+  width: 100%;
+  flex: 0 0 3px;
+}
+@media (max-width: 340px) {
+  #dashboard .gf-dashboard-summary-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
